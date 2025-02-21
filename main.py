@@ -1,80 +1,92 @@
-import asyncio
 from fastapi import FastAPI, UploadFile, File, Form
-from qdrant_client.models import VectorParams, Distance, PointStruct
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from fastapi.middleware.cors import CORSMiddleware
+import os
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct
 import uuid
-import time
+import json
+from dotenv import load_dotenv
 
+# ✅ Load environment variables
+load_dotenv()
+
+# ✅ Initialize FastAPI app
 app = FastAPI()
 
-# 🏎️ Use a FASTER embedding model (2x speed boost)
-embedding_model = OpenAIEmbeddings(model="text-embedding-3-small", openai_api_key="YOUR_OPENAI_API_KEY")
+# ✅ CORS Middleware (for frontend API calls)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change this to your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# 🚀 Optimize Qdrant Config
-QDRANT_COLLECTION_SIZE = 1536  # Vector size
-QDRANT_DISTANCE = Distance.COSINE  # Best for similarity search
-BATCH_SIZE = 100  # Increase batch size for faster inserts
+# ✅ Qdrant Client Setup
+QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")  # Change for deployment
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...), collection_name: str = Form(...)):
-    """Fast vectorization with parallel processing & optimized chunking."""
-    start_time = time.time()  # ⏱️ Start timing
-    
-    try:
-        # 🔥 Step 1: Read & Load File
-        content = await file.read()
-        file_extension = file.filename.split(".")[-1].lower()
-        
-        if file_extension == "pdf":
-            loader = PyPDFLoader(file.file)
-        elif file_extension == "txt":
-            loader = TextLoader(file.file)
-        elif file_extension == "docx":
-            loader = Docx2txtLoader(file.file)
-        else:
-            return {"error": "Unsupported file type"}
-        
-        documents = loader.load()
+qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 
-        # 🔥 Step 2: Optimize Text Chunking (2200 chars for balance)
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2200, chunk_overlap=50)
-        chunks = text_splitter.split_documents(documents)
+# ✅ OpenAI Embeddings
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002", openai_api_key=OPENAI_API_KEY)
 
-        # 🔥 Step 3: Ensure Collection Exists in Qdrant
-        qdrant_client.recreate_collection(
+# ✅ Create Collection if it doesn’t exist
+def ensure_collection_exists(collection_name):
+    if collection_name not in [c.name for c in qdrant_client.get_collections().collections]:
+        qdrant_client.create_collection(
             collection_name=collection_name,
-            vectors_config=VectorParams(size=QDRANT_COLLECTION_SIZE, distance=QDRANT_DISTANCE),
+            vectors_config=VectorParams(size=1536, distance=Distance.COSINE)  # Adjust for your embedding model
         )
 
-        # 🔥 Step 4: Use Async Parallel Processing for Faster Embeddings
-        async def process_batch(batch):
-            texts = [chunk.page_content for chunk in batch]
-            embeddings = await asyncio.to_thread(embedding_model.embed_documents, texts)
+# ✅ Process and Vectorize File
+@app.post("/upload/")
+async def upload_file(file: UploadFile = File(...), collection_name: str = Form(...)):
+    try:
+        ensure_collection_exists(collection_name)  # ✅ Ensure collection exists
 
-            points = [
-                PointStruct(
-                    id=uuid.uuid4().int & (1 << 64) - 1,
-                    vector=embedding,
-                    payload={"text": batch[j].page_content}
-                )
-                for j, embedding in enumerate(embeddings)
-            ]
+        # ✅ Stream file to disk to avoid memory overflow
+        temp_path = f"/tmp/{uuid.uuid4()}_{file.filename}"
+        with open(temp_path, "wb") as f:
+            for chunk in iter(lambda: file.file.read(1024 * 1024), b""):
+                f.write(chunk)
 
-            qdrant_client.upsert(collection_name=collection_name, points=points)
+        # ✅ Load Document
+        if file.filename.endswith(".pdf"):
+            loader = PyPDFLoader(temp_path)
+        elif file.filename.endswith(".txt"):
+            loader = TextLoader(temp_path)
+        elif file.filename.endswith(".docx"):
+            loader = Docx2txtLoader(temp_path)
+        else:
+            return {"error": "Unsupported file type"}
 
-        # 🚀 Process Chunks in Parallel (Split into batches)
-        tasks = []
-        for i in range(0, len(chunks), BATCH_SIZE):
-            batch = chunks[i:i + BATCH_SIZE]
-            tasks.append(process_batch(batch))
+        documents = loader.load()
+        os.remove(temp_path)  # ✅ Cleanup temp file
 
-        await asyncio.gather(*tasks)  # Run all batches at once 🔥
+        # ✅ Chunk Text (2500 characters with 150 overlap)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2500, chunk_overlap=150)
+        chunks = text_splitter.split_documents(documents)
 
-        # ⏱️ Calculate Time Taken
-        total_time = time.time() - start_time
-        return {"message": "File vectorized & stored!", "processing_time_sec": total_time}
+        # ✅ Parallel Processing for Faster Vectorization
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            embeddings = list(executor.map(lambda chunk: embedding_model.embed_query(chunk.page_content), chunks))
+
+        # ✅ Store in Qdrant
+        points = [
+            PointStruct(id=str(uuid.uuid4()), vector=embedding, payload={"text": chunk.page_content})
+            for embedding, chunk in zip(embeddings, chunks)
+        ]
+        qdrant_client.upsert(collection_name=collection_name, points=points)
+
+        return {"message": "File processed successfully", "num_chunks": len(chunks)}
 
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"Error processing file: {str(e)}"}
+
