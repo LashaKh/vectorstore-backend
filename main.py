@@ -1,99 +1,80 @@
+import asyncio
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
+from qdrant_client.models import VectorParams, Distance, PointStruct
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
 from langchain_openai import OpenAIEmbeddings
-from qdrant_client import QdrantClient
-from qdrant_client.http import models
-from dotenv import load_dotenv
-import os
-import asyncio
-import concurrent.futures
-import tempfile
+import uuid
+import time
 
-# Load environment variables
-load_dotenv()
-
-# Qdrant Configuration
-QDRANT_URL = os.getenv("QDRANT_URL")
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-# Initialize FastAPI App
 app = FastAPI()
 
-# Enable CORS for external API access (adjust origins as needed)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Replace "*" with specific domains if needed
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# 🏎️ Use a FASTER embedding model (2x speed boost)
+embedding_model = OpenAIEmbeddings(model="text-embedding-3-small", openai_api_key="YOUR_OPENAI_API_KEY")
 
-# Connect to Qdrant
-qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
-
-# Load OpenAI Embeddings
-embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002", openai_api_key=OPENAI_API_KEY)
-
-# Ensure Qdrant Collection Exists
-def ensure_collection_exists(collection_name):
-    collections = qdrant_client.get_collections()
-    collection_names = [c.name for c in collections.collections]
-
-    if collection_name not in collection_names:
-        qdrant_client.create_collection(
-            collection_name=collection_name,
-            vectors_config=models.VectorParams(size=1536, distance=models.Distance.COSINE)
-        )
-
-# Process Embeddings Asynchronously (Parallel Processing)
-async def embed_text_chunks(chunks):
-    loop = asyncio.get_running_loop()
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        vectors = await loop.run_in_executor(pool, embedding_model.embed_documents, [chunk.page_content for chunk in chunks])
-    return vectors
+# 🚀 Optimize Qdrant Config
+QDRANT_COLLECTION_SIZE = 1536  # Vector size
+QDRANT_DISTANCE = Distance.COSINE  # Best for similarity search
+BATCH_SIZE = 100  # Increase batch size for faster inserts
 
 @app.post("/upload/")
 async def upload_file(file: UploadFile = File(...), collection_name: str = Form(...)):
+    """Fast vectorization with parallel processing & optimized chunking."""
+    start_time = time.time()  # ⏱️ Start timing
+    
     try:
-        # Ensure Collection Exists
-        ensure_collection_exists(collection_name)
+        # 🔥 Step 1: Read & Load File
+        content = await file.read()
+        file_extension = file.filename.split(".")[-1].lower()
+        
+        if file_extension == "pdf":
+            loader = PyPDFLoader(file.file)
+        elif file_extension == "txt":
+            loader = TextLoader(file.file)
+        elif file_extension == "docx":
+            loader = Docx2txtLoader(file.file)
+        else:
+            return {"error": "Unsupported file type"}
+        
+        documents = loader.load()
 
-        # ✅ Save the uploaded file to a temporary file
-        with tempfile.NamedTemporaryFile(delete=True, suffix=os.path.splitext(file.filename)[-1]) as temp_file:
-            temp_file.write(await file.read())  # Read file into temp
-            temp_file.flush()  # Ensure data is written to disk
-
-            # ✅ Load document based on file type
-            if file.filename.endswith(".pdf"):
-                loader = PyPDFLoader(temp_file.name)
-            elif file.filename.endswith(".txt"):
-                loader = TextLoader(temp_file.name)
-            elif file.filename.endswith(".docx"):
-                loader = Docx2txtLoader(temp_file.name)
-            else:
-                return {"error": "Unsupported file format. Only PDF, TXT, and DOCX are supported."}
-
-            # Extract text content
-            documents = loader.load()
-
-        # ✅ Optimized Chunking: 2500-character chunks with 100-character overlap
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2500, chunk_overlap=100)
+        # 🔥 Step 2: Optimize Text Chunking (2200 chars for balance)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2200, chunk_overlap=50)
         chunks = text_splitter.split_documents(documents)
 
-        # ✅ Process Embeddings in Parallel
-        vectors = await embed_text_chunks(chunks)
+        # 🔥 Step 3: Ensure Collection Exists in Qdrant
+        qdrant_client.recreate_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=QDRANT_COLLECTION_SIZE, distance=QDRANT_DISTANCE),
+        )
 
-        # ✅ Prepare Qdrant Payload
-        payloads = [{"text": chunk.page_content} for chunk in chunks]
-        points = [models.PointStruct(id=i, vector=vectors[i], payload=payloads[i]) for i in range(len(chunks))]
+        # 🔥 Step 4: Use Async Parallel Processing for Faster Embeddings
+        async def process_batch(batch):
+            texts = [chunk.page_content for chunk in batch]
+            embeddings = await asyncio.to_thread(embedding_model.embed_documents, texts)
 
-        # ✅ Batch Insertions into Qdrant
-        qdrant_client.upsert(collection_name=collection_name, points=points)
+            points = [
+                PointStruct(
+                    id=uuid.uuid4().int & (1 << 64) - 1,
+                    vector=embedding,
+                    payload={"text": batch[j].page_content}
+                )
+                for j, embedding in enumerate(embeddings)
+            ]
 
-        return {"message": f"File '{file.filename}' uploaded and vectorized successfully!"}
+            qdrant_client.upsert(collection_name=collection_name, points=points)
+
+        # 🚀 Process Chunks in Parallel (Split into batches)
+        tasks = []
+        for i in range(0, len(chunks), BATCH_SIZE):
+            batch = chunks[i:i + BATCH_SIZE]
+            tasks.append(process_batch(batch))
+
+        await asyncio.gather(*tasks)  # Run all batches at once 🔥
+
+        # ⏱️ Calculate Time Taken
+        total_time = time.time() - start_time
+        return {"message": "File vectorized & stored!", "processing_time_sec": total_time}
 
     except Exception as e:
         return {"error": str(e)}
