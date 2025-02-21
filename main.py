@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import os
 import asyncio
 import concurrent.futures
+import tempfile
 
 # Load environment variables
 load_dotenv()
@@ -60,37 +61,39 @@ async def upload_file(file: UploadFile = File(...), collection_name: str = Form(
         # Ensure Collection Exists
         ensure_collection_exists(collection_name)
 
-        # Read file into memory (Avoid disk I/O bottleneck)
-        file_content = await file.read()
+        # ✅ Save the uploaded file to a temporary file
+        with tempfile.NamedTemporaryFile(delete=True, suffix=os.path.splitext(file.filename)[-1]) as temp_file:
+            temp_file.write(await file.read())  # Read file into temp
+            temp_file.flush()  # Ensure data is written to disk
 
-        # Load document based on file type
-        if file.filename.endswith(".pdf"):
-            loader = PyPDFLoader.from_bytes(file_content)
-        elif file.filename.endswith(".txt"):
-            loader = TextLoader.from_bytes(file_content)
-        elif file.filename.endswith(".docx"):
-            loader = Docx2txtLoader.from_bytes(file_content)
-        else:
-            return {"error": "Unsupported file format. Only PDF, TXT, and DOCX are supported."}
+            # ✅ Load document based on file type
+            if file.filename.endswith(".pdf"):
+                loader = PyPDFLoader(temp_file.name)
+            elif file.filename.endswith(".txt"):
+                loader = TextLoader(temp_file.name)
+            elif file.filename.endswith(".docx"):
+                loader = Docx2txtLoader(temp_file.name)
+            else:
+                return {"error": "Unsupported file format. Only PDF, TXT, and DOCX are supported."}
 
-        # Extract text content
-        documents = loader.load()
+            # Extract text content
+            documents = loader.load()
 
-        # Optimized Chunking: 2500-character chunks with 100-character overlap
+        # ✅ Optimized Chunking: 2500-character chunks with 100-character overlap
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=2500, chunk_overlap=100)
         chunks = text_splitter.split_documents(documents)
 
-        # Process Embeddings in Parallel
+        # ✅ Process Embeddings in Parallel
         vectors = await embed_text_chunks(chunks)
 
-        # Prepare Qdrant Payload
+        # ✅ Prepare Qdrant Payload
         payloads = [{"text": chunk.page_content} for chunk in chunks]
         points = [models.PointStruct(id=i, vector=vectors[i], payload=payloads[i]) for i in range(len(chunks))]
 
-        # **Optimized Batch Insertions** into Qdrant
+        # ✅ Batch Insertions into Qdrant
         qdrant_client.upsert(collection_name=collection_name, points=points)
 
-        return {"message": f"File '{file.filename}' uploaded and vectorized successfully in parallel!"}
+        return {"message": f"File '{file.filename}' uploaded and vectorized successfully!"}
 
     except Exception as e:
         return {"error": str(e)}
