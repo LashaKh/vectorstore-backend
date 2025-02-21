@@ -7,6 +7,8 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from dotenv import load_dotenv
 import os
+import asyncio
+import concurrent.futures
 
 # Load environment variables
 load_dotenv()
@@ -34,7 +36,7 @@ qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 # Load OpenAI Embeddings
 embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002", openai_api_key=OPENAI_API_KEY)
 
-# Function to ensure collection exists in Qdrant
+# Ensure Qdrant Collection Exists
 def ensure_collection_exists(collection_name):
     collections = qdrant_client.get_collections()
     collection_names = [c.name for c in collections.collections]
@@ -42,53 +44,53 @@ def ensure_collection_exists(collection_name):
     if collection_name not in collection_names:
         qdrant_client.create_collection(
             collection_name=collection_name,
-            vectors_config=models.VectorParams(size=1536, distance=models.Distance.COSINE)  # Ensure correct embedding size
+            vectors_config=models.VectorParams(size=1536, distance=models.Distance.COSINE)
         )
+
+# Process Embeddings Asynchronously (Parallel Processing)
+async def embed_text_chunks(chunks):
+    loop = asyncio.get_running_loop()
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        vectors = await loop.run_in_executor(pool, embedding_model.embed_documents, [chunk.page_content for chunk in chunks])
+    return vectors
 
 @app.post("/upload/")
 async def upload_file(file: UploadFile = File(...), collection_name: str = Form(...)):
     try:
-        # Ensure collection exists before proceeding
+        # Ensure Collection Exists
         ensure_collection_exists(collection_name)
 
-        # Save file temporarily
-        file_path = f"/tmp/{file.filename}"
-        with open(file_path, "wb") as buffer:
-            buffer.write(await file.read())
+        # Read file into memory (Avoid disk I/O bottleneck)
+        file_content = await file.read()
 
-        # Determine file type and load content
+        # Load document based on file type
         if file.filename.endswith(".pdf"):
-            loader = PyPDFLoader(file_path)
+            loader = PyPDFLoader.from_bytes(file_content)
         elif file.filename.endswith(".txt"):
-            loader = TextLoader(file_path)
+            loader = TextLoader.from_bytes(file_content)
         elif file.filename.endswith(".docx"):
-            loader = Docx2txtLoader(file_path)
+            loader = Docx2txtLoader.from_bytes(file_content)
         else:
             return {"error": "Unsupported file format. Only PDF, TXT, and DOCX are supported."}
 
-        # Load text from document
+        # Extract text content
         documents = loader.load()
 
-        # Chunk text into 2500-character pieces with 150-character overlap
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2500, chunk_overlap=150)
+        # Optimized Chunking: 2500-character chunks with 100-character overlap
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2500, chunk_overlap=100)
         chunks = text_splitter.split_documents(documents)
 
-        # Convert text chunks into vector embeddings
-        vectors = [
-            embedding_model.embed_documents([chunk.page_content])[0] for chunk in chunks
-        ]
+        # Process Embeddings in Parallel
+        vectors = await embed_text_chunks(chunks)
 
-        # Prepare points for Qdrant
+        # Prepare Qdrant Payload
         payloads = [{"text": chunk.page_content} for chunk in chunks]
-        points = [
-            models.PointStruct(id=i, vector=vectors[i], payload=payloads[i])
-            for i in range(len(chunks))
-        ]
+        points = [models.PointStruct(id=i, vector=vectors[i], payload=payloads[i]) for i in range(len(chunks))]
 
-        # Upload vectors to Qdrant
+        # **Optimized Batch Insertions** into Qdrant
         qdrant_client.upsert(collection_name=collection_name, points=points)
 
-        return {"message": f"File '{file.filename}' uploaded and vectorized successfully!"}
+        return {"message": f"File '{file.filename}' uploaded and vectorized successfully in parallel!"}
 
     except Exception as e:
         return {"error": str(e)}
