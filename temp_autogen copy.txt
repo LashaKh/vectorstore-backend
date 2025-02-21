@@ -1,0 +1,15 @@
+agentchat.contrib.capabilities.agent_capability
+AgentCapability Objects​
+class AgentCapability()
+Base class for composable capabilities that can be added to an agent.
+
+add_to_agent​
+def add_to_agent(agent: ConversableAgent)
+Adds a particular capability to the given agent. Must be implemented by the capability subclass. An implementation will typically call agent.register_hook() one or more times. See teachability.py as an example.
+
+agentchat.contrib.capabilities.teachability
+Teachability Objects​
+class Teachability(AgentCapability)
+Teachability uses a vector database to give an agent the ability to remember user teachings, where the user is any caller (human or not) sending messages to the teachable agent. Teachability is designed to be composable with other agent capabilities. To make any conversable agent teachable, instantiate both the agent and the Teachability class, then pass the agent to teachability.add_to_agent(agent). Note that teachable agents in a group chat must be given unique path_to_db_dir values.
+
+_

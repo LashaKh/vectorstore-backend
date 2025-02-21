@@ -1,0 +1,3625 @@
+agentchat.contrib.capabilities.agent_capability
+AgentCapability Objects​
+class AgentCapability()
+Base class for composable capabilities that can be added to an agent.
+
+add_to_agent​
+def add_to_agent(agent: ConversableAgent)
+Adds a particular capability to the given agent. Must be implemented by the capability subclass. An implementation will typically call agent.register_hook() one or more times. See teachability.py as an example.
+
+agentchat.contrib.capabilities.teachability
+Teachability Objects​
+class Teachability(AgentCapability)
+Teachability uses a vector database to give an agent the ability to remember user teachings, where the user is any caller (human or not) sending messages to the teachable agent. Teachability is designed to be composable with other agent capabilities. To make any conversable agent teachable, instantiate both the agent and the Teachability class, then pass the agent to teachability.add_to_agent(agent). Note that teachable agents in a group chat must be given unique path_to_db_dir values.
+
+__init__​
+def __init__(verbosity: Optional[int] = 0,
+             reset_db: Optional[bool] = False,
+             path_to_db_dir: Optional[str] = "./tmp/teachable_agent_db",
+             recall_threshold: Optional[float] = 1.5,
+             max_num_retrievals: Optional[int] = 10,
+             llm_config: Optional[Union[Dict, bool]] = None)
+Arguments:
+
+verbosity Optional, int - # 0 (default) for basic info, 1 to add memory operations, 2 for analyzer messages, 3 for memo lists.
+reset_db Optional, bool - True to clear the DB before starting. Default False.
+path_to_db_dir Optional, str - path to the directory where this particular agent's DB is stored. Default "./tmp/teachable_agent_db"
+recall_threshold Optional, float - The maximum distance for retrieved memos, where 0.0 is exact match. Default 1.5. Larger values allow more (but less relevant) memos to be recalled.
+max_num_retrievals Optional, int - The maximum number of memos to retrieve from the DB. Default 10.
+llm_config dict or False - llm inference configuration passed to TextAnalyzerAgent. If None, TextAnalyzerAgent uses llm_config from the teachable agent.
+add_to_agent​
+def add_to_agent(agent: ConversableAgent)
+Adds teachability to the given agent.
+
+prepopulate_db​
+def prepopulate_db()
+Adds a few arbitrary memos to the DB.
+
+process_last_message​
+def process_last_message(text)
+Appends any relevant memos to the message text, and stores any apparent teachings in new memos. Uses TextAnalyzerAgent to make decisions about memo storage and retrieval.
+
+MemoStore Objects​
+class MemoStore()
+Provides memory storage and retrieval for a teachable agent, using a vector database. Each DB entry (called a memo) is a pair of strings: an input text and an output text. The input text might be a question, or a task to perform. The output text might be an answer to the question, or advice on how to perform the task. Vector embeddings are currently supplied by Chroma's default Sentence Transformers.
+
+__init__​
+def __init__(verbosity, reset, path_to_db_dir)
+Arguments:
+
+verbosity (Optional, int): 1 to print memory operations, 0 to omit them. 3+ to print memo lists.
+path_to_db_dir (Optional, str): path to the directory where the DB is stored.
+list_memos​
+def list_memos()
+Prints the contents of MemoStore.
+
+reset_db​
+def reset_db()
+Forces immediate deletion of the DB's contents, in memory and on disk.
+
+add_input_output_pair​
+def add_input_output_pair(input_text, output_text)
+Adds an input-output pair to the vector DB.
+
+get_nearest_memo​
+def get_nearest_memo(query_text)
+Retrieves the nearest memo to the given query text.
+
+get_related_memos​
+def get_related_memos(query_text, n_results, threshold)
+Retrieves memos that are related to the given query text within the specified distance threshold.
+
+prepopulate​
+def prepopulate()
+agentchat.contrib.agent_builder
+AgentBuilder Objects​
+class AgentBuilder()
+AgentBuilder can help user build an automatic task solving process powered by multi-agent system. Specifically, our building pipeline includes initialize and build. In build(), we prompt a LLM to create multiple participant agents, and specify whether this task need programming to solve. User can save the built agents' config by calling save(), and load the saved configs by load(), which can skip the building process.
+
+__init__​
+def __init__(config_file_or_env: Optional[str] = "OAI_CONFIG_LIST",
+             config_file_location: Optional[str] = "",
+             builder_model: Optional[str] = "gpt-4",
+             agent_model: Optional[str] = "gpt-4",
+             host: Optional[str] = "localhost",
+             endpoint_building_timeout: Optional[int] = 600,
+             max_tokens: Optional[int] = 945,
+             max_agents: Optional[int] = 5)
+(These APIs are experimental and may change in the future.)
+
+Arguments:
+
+config_file_or_env - path or environment of the OpenAI api configs.
+builder_model - specify a model as the backbone of build manager.
+agent_model - specify a model as the backbone of participant agents.
+host - endpoint host.
+endpoint_building_timeout - timeout for building up an endpoint server.
+max_tokens - max tokens for each agent.
+max_agents - max agents for each task.
+clear_agent​
+def clear_agent(agent_name: str, recycle_endpoint: Optional[bool] = True)
+Clear a specific agent by name.
+
+Arguments:
+
+agent_name - the name of agent.
+recycle_endpoint - trigger for recycle the endpoint server. If true, the endpoint will be recycled when there is no agent depending on.
+clear_all_agents​
+def clear_all_agents(recycle_endpoint: Optional[bool] = True)
+Clear all cached agents.
+
+build​
+def build(building_task: str,
+          default_llm_config: Dict,
+          coding: Optional[bool] = None,
+          code_execution_config: Optional[Dict] = None,
+          use_oai_assistant: Optional[bool] = False,
+          **kwargs) -> Tuple[List[autogen.ConversableAgent], Dict]
+Auto build agents based on the building task.
+
+Arguments:
+
+building_task - instruction that helps build manager (gpt-4) to decide what agent should be built.
+coding - use to identify if the user proxy (a code interpreter) should be added.
+code_execution_config - specific configs for user proxy (e.g., last_n_messages, work_dir, ...).
+default_llm_config - specific configs for LLM (e.g., config_list, seed, temperature, ...).
+use_oai_assistant - use OpenAI assistant api instead of self-constructed agent.
+Returns:
+
+agent_list - a list of agents.
+cached_configs - cached configs.
+build_from_library​
+def build_from_library(
+        building_task: str,
+        library_path_or_json: str,
+        default_llm_config: Dict,
+        coding: Optional[bool] = True,
+        code_execution_config: Optional[Dict] = None,
+        use_oai_assistant: Optional[bool] = False,
+        embedding_model: Optional[str] = None,
+        **kwargs) -> Tuple[List[autogen.ConversableAgent], Dict]
+Build agents from a library. The library is a list of agent configs, which contains the name and system_message for each agent. We use a build manager to decide what agent in that library should be involved to the task.
+
+Arguments:
+
+building_task - instruction that helps build manager (gpt-4) to decide what agent should be built.
+library_path_or_json - path or JSON string config of agent library.
+default_llm_config - specific configs for LLM (e.g., config_list, seed, temperature, ...).
+coding - use to identify if the user proxy (a code interpreter) should be added.
+code_execution_config - specific configs for user proxy (e.g., last_n_messages, work_dir, ...).
+use_oai_assistant - use OpenAI assistant api instead of self-constructed agent.
+embedding_model - a Sentence-Transformers model use for embedding similarity to select agents from library. if None, an openai model will be prompted to select agents. As reference, chromadb use "all-mpnet-base- v2" as default.
+Returns:
+
+agent_list - a list of agents.
+cached_configs - cached configs.
+save​
+def save(filepath: Optional[str] = None) -> str
+Save building configs. If the filepath is not specific, this function will create a filename by encrypt the buildingtask string by md5 with "save_config" prefix, and save config to the local path.
+
+Arguments:
+
+filepath - save path.
+Returns:
+
+filepath - path save.
+load​
+def load(filepath: Optional[str] = None,
+         config_json: Optional[str] = None,
+         use_oai_assistant: Optional[bool] = False,
+         **kwargs) -> Tuple[List[autogen.ConversableAgent], Dict]
+Load building configs and call the build function to complete building without calling online LLMs' api.
+
+Arguments:
+
+filepath - filepath or JSON string for the save config.
+config_json - JSON string for the save config.
+use_oai_assistant - use OpenAI assistant api instead of self-constructed agent.
+Returns:
+
+agent_list - a list of agents.
+cached_configs - cached configs.
+
+agentchat.contrib.compressible_agent
+CompressibleAgent Objects​
+class CompressibleAgent(ConversableAgent)
+(Experimental) CompressibleAgent agent. While this agent retains all the default functionalities of the AssistantAgent, it also provides the added feature of compression when activated through the compress_config setting.
+
+compress_config is set to False by default, making this agent equivalent to the AssistantAgent. This agent does not work well in a GroupChat: The compressed messages will not be sent to all the agents in the group. The default system message is the same as AssistantAgent. human_input_mode is default to "NEVER" and code_execution_config is default to False. This agent doesn't execute code or function call by default.
+
+__init__​
+def __init__(name: str,
+             system_message: Optional[str] = DEFAULT_SYSTEM_MESSAGE,
+             is_termination_msg: Optional[Callable[[Dict], bool]] = None,
+             max_consecutive_auto_reply: Optional[int] = None,
+             human_input_mode: Optional[str] = "NEVER",
+             function_map: Optional[Dict[str, Callable]] = None,
+             code_execution_config: Optional[Union[Dict, bool]] = False,
+             llm_config: Optional[Union[Dict, bool]] = None,
+             default_auto_reply: Optional[Union[str, Dict, None]] = "",
+             compress_config: Optional[Dict] = False)
+Arguments:
+
+name str - agent name.
+system_message str - system message for the ChatCompletion inference. Please override this attribute if you want to reprogram the agent.
+llm_config dict - llm inference configuration. Please refer to OpenAIWrapper.create for available options.
+is_termination_msg function - a function that takes a message in the form of a dictionary and returns a boolean value indicating if this received message is a termination message. The dict can contain the following keys: "content", "role", "name", "function_call".
+max_consecutive_auto_reply int - the maximum number of consecutive auto replies. default to None (no limit provided, class attribute MAX_CONSECUTIVE_AUTO_REPLY will be used as the limit in this case). The limit only plays a role when human_input_mode is not "ALWAYS".
+compress_config dict or True/False - config for compression before oai_reply. Default to False. You should contain the following keys:
+"mode" (Optional, str, default to "TERMINATE"): Choose from ["COMPRESS", "TERMINATE", "CUSTOMIZED"].
+"TERMINATE" - terminate the conversation ONLY when token count exceeds the max limit of current model. trigger_count is NOT used in this mode.
+"COMPRESS" - compress the messages when the token count exceeds the limit.
+"CUSTOMIZED" - pass in a customized function to compress the messages.
+"compress_function" (Optional, callable, default to None): Must be provided when mode is "CUSTOMIZED". The function should takes a list of messages and returns a tuple of (is_compress_success: bool, compressed_messages: List[Dict]).
+"trigger_count" (Optional, float, int, default to 0.7): the threshold to trigger compression. If a float between (0, 1], it is the percentage of token used. if a int, it is the number of tokens used.
+"async" (Optional, bool, default to False): whether to compress asynchronously.
+"broadcast" (Optional, bool, default to True): whether to update the compressed message history to sender.
+"verbose" (Optional, bool, default to False): Whether to print the content before and after compression. Used when mode="COMPRESS".
+"leave_last_n" (Optional, int, default to 0): If provided, the last n messages will not be compressed. Used when mode="COMPRESS".
+**kwargs dict - Please refer to other kwargs in ConversableAgent.
+generate_reply​
+def generate_reply(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        exclude: Optional[List[Callable]] = None) -> Union[str, Dict, None]
+Adding to line 202:
+
+    if messages is not None and messages != self._oai_messages[sender]:
+        messages = self._oai_messages[sender]
+on_oai_token_limit​
+def on_oai_token_limit(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[Any] = None) -> Tuple[bool, Union[str, Dict, None]]
+(Experimental) Compress previous messages when a threshold of tokens is reached.
+
+TODO: async compress TODO: maintain a list for old oai messages (messages before compression)
+
+compress_messages​
+def compress_messages(
+        messages: Optional[List[Dict]] = None,
+        config: Optional[Any] = None
+) -> Tuple[bool, Union[str, Dict, None, List]]
+Compress a list of messages into one message.
+
+The first message (the initial prompt) will not be compressed. The rest of the messages will be compressed into one message, the model is asked to distinguish the role of each message: USER, ASSISTANT, FUNCTION_CALL, FUNCTION_RETURN. Check out the compress_sys_msg.
+
+TODO: model used in compression agent is different from assistant agent: For example, if original model used by is gpt-4; we start compressing at 70% of usage, 70% of 8092 = 5664; and we use gpt 3.5 here max_toke = 4096, it will raise error. choosinng model automatically?
+
+Edit this page
+
+
+agentchat.contrib.gpt_assistant_agent
+GPTAssistantAgent Objects​
+class GPTAssistantAgent(ConversableAgent)
+An experimental AutoGen agent class that leverages the OpenAI Assistant API for conversational capabilities. This agent is unique in its reliance on the OpenAI Assistant for state management, differing from other agents like ConversableAgent.
+
+__init__​
+def __init__(name="GPT Assistant",
+             instructions: Optional[str] = None,
+             llm_config: Optional[Union[Dict, bool]] = None,
+             overwrite_instructions: bool = False,
+             **kwargs)
+Arguments:
+
+name str - name of the agent. It will be used to find the existing assistant by name. Please remember to delete an old assistant with the same name if you intend to create a new assistant with the same name.
+instructions str - instructions for the OpenAI assistant configuration. When instructions is not None, the system message of the agent will be set to the provided instructions and used in the assistant run, irrespective of the overwrite_instructions flag. But when instructions is None, and the assistant does not exist, the system message will be set to AssistantAgent.DEFAULT_SYSTEM_MESSAGE. If the assistant exists, the system message will be set to the existing assistant instructions.
+llm_config dict or False - llm inference configuration.
+assistant_id: ID of the assistant to use. If None, a new assistant will be created.
+model: Model to use for the assistant (gpt-4-1106-preview, gpt-3.5-turbo-1106).
+check_every_ms: check thread run status interval
+tools: Give Assistants access to OpenAI-hosted tools like Code Interpreter and Knowledge Retrieval, or build your own tools using Function calling. ref https://platform.openai.com/docs/assistants/tools
+file_ids: files used by retrieval in run
+overwrite_instructions bool - whether to overwrite the instructions of an existing assistant. This parameter is in effect only when assistant_id is specified in llm_config.
+kwargs dict - Additional configuration options for the agent.
+verbose (bool): If set to True, enables more detailed output from the assistant thread.
+Other kwargs: Except verbose, others are passed directly to ConversableAgent.
+can_execute_function​
+def can_execute_function(name: str) -> bool
+Whether the agent can execute the function.
+
+reset​
+def reset()
+Resets the agent, clearing any existing conversation thread and unread message indices.
+
+clear_history​
+def clear_history(agent: Optional[Agent] = None)
+Clear the chat history of the agent.
+
+Arguments:
+
+agent - the agent with whom the chat history to clear. If None, clear the chat history with all agents.
+pretty_print_thread​
+def pretty_print_thread(thread)
+Pretty print the thread.
+
+oai_threads​
+@property
+def oai_threads() -> Dict[Agent, Any]
+Return the threads of the agent.
+
+assistant_id​
+@property
+def assistant_id()
+Return the assistant id
+
+get_assistant_instructions​
+def get_assistant_instructions()
+Return the assistant instructions from OAI assistant API
+
+delete_assistant​
+def delete_assistant()
+Delete the assistant from OAI assistant API
+
+find_matching_assistant​
+def find_matching_assistant(candidate_assistants, instructions, tools,
+                            file_ids)
+Find the matching assistant from a list of candidate assistants. Filter out candidates with the same name but different instructions, file IDs, and function names. TODO: implement accurate match based on assistant metadata fields.
+
+agentchat.contrib.img_utils
+llava_formatter​
+def llava_formatter(prompt: str,
+                    order_image_tokens: bool = False) -> Tuple[str, List[str]]
+Formats the input prompt by replacing image tags and returns the new prompt along with image locations.
+
+Arguments:
+
+prompt (str): The input string that may contain image tags like <img ...>.
+order_image_tokens (bool, optional): Whether to order the image tokens with numbers. It will be useful for GPT-4V. Defaults to False.
+Returns:
+
+Tuple[str, List[str]]: A tuple containing the formatted string and a list of images (loaded in b64 format).
+gpt4v_formatter​
+def gpt4v_formatter(prompt: str) -> List[Union[str, dict]]
+Formats the input prompt by replacing image tags and returns a list of text and images.
+
+Arguments:
+
+prompt (str): The input string that may contain image tags like <img ...>.
+Returns:
+
+List[Union[str, dict]]: A list of alternating text and image dictionary items.
+extract_img_paths​
+def extract_img_paths(paragraph: str) -> list
+Extract image paths (URLs or local paths) from a text paragraph.
+
+Arguments:
+
+paragraph str - The input text paragraph.
+Returns:
+
+list - A list of extracted image paths.
+agentchat.contrib.llava_agent
+LLaVAAgent Objects​
+class LLaVAAgent(MultimodalConversableAgent)
+__init__​
+def __init__(name: str,
+             system_message: Optional[Tuple[str,
+                                            List]] = DEFAULT_LLAVA_SYS_MSG,
+             *args,
+             **kwargs)
+Arguments:
+
+name str - agent name.
+system_message str - system message for the ChatCompletion inference. Please override this attribute if you want to reprogram the agent.
+**kwargs dict - Please refer to other kwargs in ConversableAgent.
+llava_call​
+def llava_call(prompt: str, llm_config: dict) -> str
+Makes a call to the LLaVA service to generate text based on a given prompt
+
+Edit this page
+
+agentchat.contrib.math_user_proxy_agent
+MathUserProxyAgent Objects​
+class MathUserProxyAgent(UserProxyAgent)
+(Experimental) A MathChat agent that can handle math problems.
+
+MAX_CONSECUTIVE_AUTO_REPLY​
+maximum number of consecutive auto replies (subject to future change)
+
+__init__​
+def __init__(name: Optional[str] = "MathChatAgent",
+             is_termination_msg: Optional[Callable[
+                 [Dict], bool]] = _is_termination_msg_mathchat,
+             human_input_mode: Optional[str] = "NEVER",
+             default_auto_reply: Optional[Union[str, Dict,
+                                                None]] = DEFAULT_REPLY,
+             max_invalid_q_per_step=3,
+             **kwargs)
+Arguments:
+
+name str - name of the agent
+is_termination_msg function - a function that takes a message in the form of a dictionary and returns a boolean value indicating if this received message is a termination message. The dict can contain the following keys: "content", "role", "name", "function_call".
+human_input_mode str - whether to ask for human inputs every time a message is received. Possible values are "ALWAYS", "TERMINATE", "NEVER". (1) When "ALWAYS", the agent prompts for human input every time a message is received. Under this mode, the conversation stops when the human input is "exit", or when is_termination_msg is True and there is no human input. (2) When "TERMINATE", the agent only prompts for human input only when a termination message is received or the number of auto reply reaches the max_consecutive_auto_reply. (3) (Default) When "NEVER", the agent will never prompt for human input. Under this mode, the conversation stops when the number of auto reply reaches the max_consecutive_auto_reply or when is_termination_msg is True.
+default_auto_reply str or dict or None - the default auto reply message when no code execution or llm based reply is generated.
+max_invalid_q_per_step int - (ADDED) the maximum number of invalid queries per step.
+**kwargs dict - other kwargs in UserProxyAgent.
+generate_init_message​
+def generate_init_message(problem,
+                          prompt_type="default",
+                          customized_prompt=None)
+Generate a prompt for the assistant agent with the given problem and prompt.
+
+Arguments:
+
+problem str - the problem to be solved.
+prompt_type str - the type of the prompt. Possible values are "default", "python", "wolfram". (1) "default": the prompt that allows the agent to choose between 3 ways to solve a problem:
+write a python program to solve it directly.
+solve it directly without python.
+solve it step by step with python. (2) "python": a simplified prompt from the third way of the "default" prompt, that asks the assistant to solve the problem step by step with python. (3) "two_tools": a simplified prompt similar to the "python" prompt, but allows the model to choose between Python and Wolfram Alpha to solve the problem.
+customized_prompt str - a customized prompt to be used. If it is not None, the prompt_type will be ignored.
+Returns:
+
+str - the generated prompt ready to be sent to the assistant agent.
+execute_one_python_code​
+def execute_one_python_code(pycode)
+Execute python code blocks.
+
+Previous python code will be saved and executed together with the new code. the "print" function will also be added to the last line of the code if needed
+
+execute_one_wolfram_query​
+def execute_one_wolfram_query(query: str)
+Run one wolfram query and return the output.
+
+Arguments:
+
+query - string of the query.
+Returns:
+
+output - string with the output of the query.
+is_success - boolean indicating whether the query was successful.
+get_from_dict_or_env​
+def get_from_dict_or_env(data: Dict[str, Any],
+                         key: str,
+                         env_key: str,
+                         default: Optional[str] = None) -> str
+Get a value from a dictionary or an environment variable.
+
+WolframAlphaAPIWrapper Objects​
+class WolframAlphaAPIWrapper(BaseModel)
+Wrapper for Wolfram Alpha.
+
+Docs for using:
+
+Go to wolfram alpha and sign up for a developer account
+Create an app and get your APP ID
+Save your APP ID into WOLFRAM_ALPHA_APPID env variable
+pip install wolframalpha
+wolfram_client​
+:meta private:
+
+Config Objects​
+class Config()
+Configuration for this pydantic object.
+
+validate_environment​
+@root_validator(skip_on_failure=True)
+def validate_environment(cls, values: Dict) -> Dict
+Validate that api key and python package exists in environment.
+
+run​
+def run(query: str) -> Tuple[str, bool]
+Run query through WolframAlpha and parse result.
+agentchat.contrib.multimodal_conversable_agent
+MultimodalConversableAgent Objects​
+class MultimodalConversableAgent(ConversableAgent)
+__init__​
+def __init__(name: str,
+             system_message: Optional[Union[str, List]] = DEFAULT_LMM_SYS_MSG,
+             is_termination_msg: str = None,
+             *args,
+             **kwargs)
+Arguments:
+
+name str - agent name.
+system_message str - system message for the OpenAIWrapper inference. Please override this attribute if you want to reprogram the agent.
+**kwargs dict - Please refer to other kwargs in ConversableAgent.
+update_system_message​
+def update_system_message(system_message: Union[Dict, List, str])
+Update the system message.
+
+Arguments:
+
+system_message str - system message for the OpenAIWrapper inference
+
+agentchat.contrib.qdrant_retrieve_user_proxy_agent
+QdrantRetrieveUserProxyAgent Objects​
+class QdrantRetrieveUserProxyAgent(RetrieveUserProxyAgent)
+__init__​
+def __init__(name="RetrieveChatAgent",
+             human_input_mode: Optional[str] = "ALWAYS",
+             is_termination_msg: Optional[Callable[[Dict], bool]] = None,
+             retrieve_config: Optional[Dict] = None,
+             **kwargs)
+Arguments:
+
+name str - name of the agent.
+human_input_mode str - whether to ask for human inputs every time a message is received. Possible values are "ALWAYS", "TERMINATE", "NEVER". (1) When "ALWAYS", the agent prompts for human input every time a message is received. Under this mode, the conversation stops when the human input is "exit", or when is_termination_msg is True and there is no human input. (2) When "TERMINATE", the agent only prompts for human input only when a termination message is received or the number of auto reply reaches the max_consecutive_auto_reply. (3) When "NEVER", the agent will never prompt for human input. Under this mode, the conversation stops when the number of auto reply reaches the max_consecutive_auto_reply or when is_termination_msg is True.
+is_termination_msg function - a function that takes a message in the form of a dictionary and returns a boolean value indicating if this received message is a termination message. The dict can contain the following keys: "content", "role", "name", "function_call".
+retrieve_config dict or None - config for the retrieve agent. To use default config, set to None. Otherwise, set to a dictionary with the following keys:
+task (Optional, str): the task of the retrieve chat. Possible values are "code", "qa" and "default". System prompt will be different for different tasks. The default value is default, which supports both code and qa.
+client (Optional, qdrant_client.QdrantClient(":memory:")): A QdrantClient instance. If not provided, an in-memory instance will be assigned. Not recommended for production. will be used. If you want to use other vector db, extend this class and override the retrieve_docs function.
+docs_path (Optional, Union[str, List[str]]): the path to the docs directory. It can also be the path to a single file, the url to a single file or a list of directories, files and urls. Default is None, which works only if the collection is already created.
+extra_docs (Optional, bool): when true, allows adding documents with unique IDs without overwriting existing ones; when false, it replaces existing documents using default IDs, risking collection overwrite., when set to true it enables the system to assign unique IDs starting from "length+i" for new document chunks, preventing the replacement of existing documents and facilitating the addition of more content to the collection.. By default, "extra_docs" is set to false, starting document IDs from zero. This poses a risk as new documents might overwrite existing ones, potentially causing unintended loss or alteration of data in the collection.
+collection_name (Optional, str): the name of the collection. If key not provided, a default name autogen-docs will be used.
+model (Optional, str): the model to use for the retrieve chat. If key not provided, a default model gpt-4 will be used.
+chunk_token_size (Optional, int): the chunk token size for the retrieve chat. If key not provided, a default size max_tokens * 0.4 will be used.
+context_max_tokens (Optional, int): the context max token size for the retrieve chat. If key not provided, a default size max_tokens * 0.8 will be used.
+chunk_mode (Optional, str): the chunk mode for the retrieve chat. Possible values are "multi_lines" and "one_line". If key not provided, a default mode multi_lines will be used.
+must_break_at_empty_line (Optional, bool): chunk will only break at empty line if True. Default is True. If chunk_mode is "one_line", this parameter will be ignored.
+embedding_model (Optional, str): the embedding model to use for the retrieve chat. If key not provided, a default model BAAI/bge-small-en-v1.5 will be used. All available models can be found at https://qdrant.github.io/fastembed/examples/Supported_Models/.
+customized_prompt (Optional, str): the customized prompt for the retrieve chat. Default is None.
+customized_answer_prefix (Optional, str): the customized answer prefix for the retrieve chat. Default is "". If not "" and the customized_answer_prefix is not in the answer, Update Context will be triggered.
+update_context (Optional, bool): if False, will not apply Update Context for interactive retrieval. Default is True.
+custom_token_count_function (Optional, Callable): a custom function to count the number of tokens in a string. The function should take a string as input and return three integers (token_count, tokens_per_message, tokens_per_name). Default is None, tiktoken will be used and may not be accurate for non-OpenAI models.
+custom_text_split_function (Optional, Callable): a custom function to split a string into a list of strings. Default is None, will use the default function in autogen.retrieve_utils.split_text_to_chunks.
+custom_text_types (Optional, List[str]): a list of file types to be processed. Default is autogen.retrieve_utils.TEXT_FORMATS. This only applies to files under the directories in docs_path. Explicitly included files and urls will be chunked regardless of their types.
+recursive (Optional, bool): whether to search documents recursively in the docs_path. Default is True.
+parallel (Optional, int): How many parallel workers to use for embedding. Defaults to the number of CPU cores.
+on_disk (Optional, bool): Whether to store the collection on disk. Default is False.
+quantization_config: Quantization configuration. If None, quantization will be disabled.
+hnsw_config: HNSW configuration. If None, default configuration will be used. You can find more info about the hnsw configuration options at https://qdrant.tech/documentation/concepts/indexing/`vector`-index. API Reference: https://qdrant.github.io/qdrant/redoc/index.html#tag/collections/operation/create_collection
+payload_indexing: Whether to create a payload index for the document field. Default is False. You can find more info about the payload indexing options at https://qdrant.tech/documentation/concepts/indexing/`payload`-index API Reference: https://qdrant.github.io/qdrant/redoc/index.html#tag/collections/operation/create_field_index
+**kwargs dict - other kwargs in UserProxyAgent.
+retrieve_docs​
+def retrieve_docs(problem: str, n_results: int = 20, search_string: str = "")
+Arguments:
+
+problem str - the problem to be solved.
+n_results int - the number of results to be retrieved. Default is 20.
+search_string str - only docs that contain an exact match of this string will be retrieved. Default is "".
+create_qdrant_from_dir​
+def create_qdrant_from_dir(
+        dir_path: str,
+        max_tokens: int = 4000,
+        client: QdrantClient = None,
+        collection_name: str = "all-my-documents",
+        chunk_mode: str = "multi_lines",
+        must_break_at_empty_line: bool = True,
+        embedding_model: str = "BAAI/bge-small-en-v1.5",
+        custom_text_split_function: Callable = None,
+        custom_text_types: List[str] = TEXT_FORMATS,
+        recursive: bool = True,
+        extra_docs: bool = False,
+        parallel: int = 0,
+        on_disk: bool = False,
+        quantization_config: Optional[models.QuantizationConfig] = None,
+        hnsw_config: Optional[models.HnswConfigDiff] = None,
+        payload_indexing: bool = False,
+        qdrant_client_options: Optional[Dict] = {})
+Create a Qdrant collection from all the files in a given directory, the directory can also be a single file or a url to a single file.
+
+Arguments:
+
+dir_path str - the path to the directory, file or url.
+max_tokens Optional, int - the maximum number of tokens per chunk. Default is 4000.
+client Optional, QdrantClient - the QdrantClient instance. Default is None.
+collection_name Optional, str - the name of the collection. Default is "all-my-documents".
+chunk_mode Optional, str - the chunk mode. Default is "multi_lines".
+must_break_at_empty_line Optional, bool - Whether to break at empty line. Default is True.
+embedding_model Optional, str - the embedding model to use. Default is "BAAI/bge-small-en-v1.5". The list of all the available models can be at https://qdrant.github.io/fastembed/examples/Supported_Models/.
+custom_text_split_function Optional, Callable - a custom function to split a string into a list of strings. Default is None, will use the default function in autogen.retrieve_utils.split_text_to_chunks.
+custom_text_types Optional, List[str] - a list of file types to be processed. Default is TEXT_FORMATS.
+recursive Optional, bool - whether to search documents recursively in the dir_path. Default is True.
+extra_docs Optional, bool - whether to add more documents in the collection. Default is False
+parallel Optional, int - How many parallel workers to use for embedding. Defaults to the number of CPU cores
+on_disk Optional, bool - Whether to store the collection on disk. Default is False.
+quantization_config - Quantization configuration. If None, quantization will be disabled.
+Ref - https://qdrant.github.io/qdrant/redoc/index.html#tag/collections/operation/create_collection
+hnsw_config - HNSW configuration. If None, default configuration will be used.
+Ref - https://qdrant.github.io/qdrant/redoc/index.html#tag/collections/operation/create_collection
+payload_indexing - Whether to create a payload index for the document field. Default is False.
+qdrant_client_options - (Optional, dict): the options for instantiating the qdrant client.
+Ref - https://github.com/qdrant/qdrant-client/blob/master/qdrant_client/qdrant_client.py#L36-L58.
+query_qdrant​
+def query_qdrant(
+        query_texts: List[str],
+        n_results: int = 10,
+        client: QdrantClient = None,
+        collection_name: str = "all-my-documents",
+        search_string: str = "",
+        embedding_model: str = "BAAI/bge-small-en-v1.5",
+        qdrant_client_options: Optional[Dict] = {}
+) -> List[List[QueryResponse]]
+Perform a similarity search with filters on a Qdrant collection
+
+Arguments:
+
+query_texts List[str] - the query texts.
+n_results Optional, int - the number of results to return. Default is 10.
+client Optional, API - the QdrantClient instance. A default in-memory client will be instantiated if None.
+collection_name Optional, str - the name of the collection. Default is "all-my-documents".
+search_string Optional, str - the search string. Default is "".
+embedding_model Optional, str - the embedding model to use. Default is "all-MiniLM-L6-v2". Will be ignored if embedding_function is not None.
+qdrant_client_options - (Optional, dict): the options for instantiating the qdrant client. Reference: https://github.com/qdrant/qdrant-client/blob/master/qdrant_client/qdrant_client.py#L36-L58.
+Returns:
+
+List[List[QueryResponse]] - the query result. The format is: class QueryResponse(BaseModel, extra="forbid"): # type: ignore
+id - Union[str, int]
+embedding - Optional[List[float]]
+metadata - Dict[str, Any]
+document - str
+score - float
+
+agentchat.contrib.retrieve_assistant_agent
+RetrieveAssistantAgent Objects​
+class RetrieveAssistantAgent(AssistantAgent)
+(Experimental) Retrieve Assistant agent, designed to solve a task with LLM.
+
+RetrieveAssistantAgent is a subclass of AssistantAgent configured with a default system message. The default system message is designed to solve a task with LLM, including suggesting python code blocks and debugging. human_input_mode is default to "NEVER" and code_execution_config is default to False. This agent doesn't execute code by default, and expects the user to execute the code.
+
+agentchat.contrib.retrieve_user_proxy_agent
+RetrieveUserProxyAgent Objects​
+class RetrieveUserProxyAgent(UserProxyAgent)
+__init__​
+def __init__(name="RetrieveChatAgent",
+             human_input_mode: Optional[str] = "ALWAYS",
+             is_termination_msg: Optional[Callable[[Dict], bool]] = None,
+             retrieve_config: Optional[Dict] = None,
+             **kwargs)
+Arguments:
+
+name str - name of the agent.
+
+human_input_mode str - whether to ask for human inputs every time a message is received. Possible values are "ALWAYS", "TERMINATE", "NEVER". (1) When "ALWAYS", the agent prompts for human input every time a message is received. Under this mode, the conversation stops when the human input is "exit", or when is_termination_msg is True and there is no human input. (2) When "TERMINATE", the agent only prompts for human input only when a termination message is received or the number of auto reply reaches the max_consecutive_auto_reply. (3) When "NEVER", the agent will never prompt for human input. Under this mode, the conversation stops when the number of auto reply reaches the max_consecutive_auto_reply or when is_termination_msg is True.
+
+is_termination_msg function - a function that takes a message in the form of a dictionary and returns a boolean value indicating if this received message is a termination message. The dict can contain the following keys: "content", "role", "name", "function_call".
+
+retrieve_config dict or None - config for the retrieve agent. To use default config, set to None. Otherwise, set to a dictionary with the following keys:
+
+task (Optional, str): the task of the retrieve chat. Possible values are "code", "qa" and "default". System prompt will be different for different tasks. The default value is default, which supports both code and qa.
+client (Optional, chromadb.Client): the chromadb client. If key not provided, a default client chromadb.Client() will be used. If you want to use other vector db, extend this class and override the retrieve_docs function.
+docs_path (Optional, Union[str, List[str]]): the path to the docs directory. It can also be the path to a single file, the url to a single file or a list of directories, files and urls. Default is None, which works only if the collection is already created.
+extra_docs (Optional, bool): when true, allows adding documents with unique IDs without overwriting existing ones; when false, it replaces existing documents using default IDs, risking collection overwrite., when set to true it enables the system to assign unique IDs starting from "length+i" for new document chunks, preventing the replacement of existing documents and facilitating the addition of more content to the collection.. By default, "extra_docs" is set to false, starting document IDs from zero. This poses a risk as new documents might overwrite existing ones, potentially causing unintended loss or alteration of data in the collection.
+collection_name (Optional, str): the name of the collection. If key not provided, a default name autogen-docs will be used.
+model (Optional, str): the model to use for the retrieve chat. If key not provided, a default model gpt-4 will be used.
+chunk_token_size (Optional, int): the chunk token size for the retrieve chat. If key not provided, a default size max_tokens * 0.4 will be used.
+context_max_tokens (Optional, int): the context max token size for the retrieve chat. If key not provided, a default size max_tokens * 0.8 will be used.
+chunk_mode (Optional, str): the chunk mode for the retrieve chat. Possible values are "multi_lines" and "one_line". If key not provided, a default mode multi_lines will be used.
+must_break_at_empty_line (Optional, bool): chunk will only break at empty line if True. Default is True. If chunk_mode is "one_line", this parameter will be ignored.
+embedding_model (Optional, str): the embedding model to use for the retrieve chat. If key not provided, a default model all-MiniLM-L6-v2 will be used. All available models can be found at https://www.sbert.net/docs/pretrained_models.html. The default model is a fast model. If you want to use a high performance model, all-mpnet-base-v2 is recommended.
+embedding_function (Optional, Callable): the embedding function for creating the vector db. Default is None, SentenceTransformer with the given embedding_model will be used. If you want to use OpenAI, Cohere, HuggingFace or other embedding functions, you can pass it here, follow the examples in https://docs.trychroma.com/embeddings.
+customized_prompt (Optional, str): the customized prompt for the retrieve chat. Default is None.
+customized_answer_prefix (Optional, str): the customized answer prefix for the retrieve chat. Default is "". If not "" and the customized_answer_prefix is not in the answer, Update Context will be triggered.
+update_context (Optional, bool): if False, will not apply Update Context for interactive retrieval. Default is True.
+get_or_create (Optional, bool): if True, will create/return a collection for the retrieve chat. This is the same as that used in chromadb. Default is False. Will raise ValueError if the collection already exists and get_or_create is False. Will be set to True if docs_path is None.
+custom_token_count_function (Optional, Callable): a custom function to count the number of tokens in a string. The function should take (text:str, model:str) as input and return the token_count(int). the retrieve_config["model"] will be passed in the function. Default is autogen.token_count_utils.count_token that uses tiktoken, which may not be accurate for non-OpenAI models.
+custom_text_split_function (Optional, Callable): a custom function to split a string into a list of strings. Default is None, will use the default function in autogen.retrieve_utils.split_text_to_chunks.
+custom_text_types (Optional, List[str]): a list of file types to be processed. Default is autogen.retrieve_utils.TEXT_FORMATS. This only applies to files under the directories in docs_path. Explicitly included files and urls will be chunked regardless of their types.
+recursive (Optional, bool): whether to search documents recursively in the docs_path. Default is True.
+**kwargs dict - other kwargs in UserProxyAgent.
+
+Example of overriding retrieve_docs: If you have set up a customized vector db, and it's not compatible with chromadb, you can easily plug in it with below code.
+
+class MyRetrieveUserProxyAgent(RetrieveUserProxyAgent):
+    def query_vector_db(
+        self,
+        query_texts: List[str],
+        n_results: int = 10,
+        search_string: str = "",
+        **kwargs,
+    ) -> Dict[str, Union[List[str], List[List[str]]]]:
+        # define your own query function here
+        pass
+
+    def retrieve_docs(self, problem: str, n_results: int = 20, search_string: str = "", **kwargs):
+        results = self.query_vector_db(
+            query_texts=[problem],
+            n_results=n_results,
+            search_string=search_string,
+            **kwargs,
+        )
+
+        self._results = results
+        print("doc_ids: ", results["ids"])
+retrieve_docs​
+def retrieve_docs(problem: str, n_results: int = 20, search_string: str = "")
+Retrieve docs based on the given problem and assign the results to the class property _results. In case you want to customize the retrieval process, such as using a different vector db whose APIs are not compatible with chromadb or filter results with metadata, you can override this function. Just keep the current parameters and add your own parameters with default values, and keep the results in below type.
+
+Type of the results: Dict[str, List[List[Any]]], should have keys "ids" and "documents", "ids" for the ids of the retrieved docs and "documents" for the contents of the retrieved docs. Any other keys are optional. Refer to chromadb.api.types.QueryResult as an example. ids: List[string] documents: List[List[string]]
+
+Arguments:
+
+problem str - the problem to be solved.
+n_results int - the number of results to be retrieved. Default is 20.
+search_string str - only docs that contain an exact match of this string will be retrieved. Default is "".
+generate_init_message​
+def generate_init_message(problem: str,
+                          n_results: int = 20,
+                          search_string: str = "")
+Generate an initial message with the given problem and prompt.
+
+Arguments:
+
+problem str - the problem to be solved.
+n_results int - the number of results to be retrieved.
+search_string str - only docs containing this string will be retrieved.
+Returns:
+
+str - the generated prompt ready to be sent to the assistant agent.
+
+
+agentchat.contrib.text_analyzer_agent
+TextAnalyzerAgent Objects​
+class TextAnalyzerAgent(ConversableAgent)
+(Experimental) Text Analysis agent, a subclass of ConversableAgent designed to analyze text as instructed.
+
+__init__​
+def __init__(name="analyzer",
+             system_message: Optional[str] = system_message,
+             human_input_mode: Optional[str] = "NEVER",
+             llm_config: Optional[Union[Dict, bool]] = None,
+             **kwargs)
+Arguments:
+
+name str - name of the agent.
+system_message str - system message for the ChatCompletion inference.
+human_input_mode str - This agent should NEVER prompt the human for input.
+llm_config dict or False - llm inference configuration. Please refer to OpenAIWrapper.create for available options. To disable llm-based auto reply, set to False.
+**kwargs dict - other kwargs in ConversableAgent.
+analyze_text​
+def analyze_text(text_to_analyze, analysis_instructions)
+Analyzes the given text as instructed, and returns the analysis.
+
+
+agentchat.agent
+Agent Objects​
+class Agent()
+(In preview) An abstract class for AI agent.
+
+An agent can communicate with other agents and perform actions. Different agents can differ in what actions they perform in the receive method.
+
+__init__​
+def __init__(name: str)
+Arguments:
+
+name str - name of the agent.
+name​
+@property
+def name()
+Get the name of the agent.
+
+send​
+def send(message: Union[Dict, str],
+         recipient: "Agent",
+         request_reply: Optional[bool] = None)
+(Abstract method) Send a message to another agent.
+
+a_send​
+async def a_send(message: Union[Dict, str],
+                 recipient: "Agent",
+                 request_reply: Optional[bool] = None)
+(Abstract async method) Send a message to another agent.
+
+receive​
+def receive(message: Union[Dict, str],
+            sender: "Agent",
+            request_reply: Optional[bool] = None)
+(Abstract method) Receive a message from another agent.
+
+a_receive​
+async def a_receive(message: Union[Dict, str],
+                    sender: "Agent",
+                    request_reply: Optional[bool] = None)
+(Abstract async method) Receive a message from another agent.
+
+reset​
+def reset()
+(Abstract method) Reset the agent.
+
+generate_reply​
+def generate_reply(messages: Optional[List[Dict]] = None,
+                   sender: Optional["Agent"] = None,
+                   **kwargs) -> Union[str, Dict, None]
+(Abstract method) Generate a reply based on the received messages.
+
+Arguments:
+
+messages list[dict] - a list of messages received.
+sender - sender of an Agent instance.
+Returns:
+
+str or dict or None: the generated reply. If None, no reply is generated.
+
+a_generate_reply​
+async def a_generate_reply(messages: Optional[List[Dict]] = None,
+                           sender: Optional["Agent"] = None,
+                           **kwargs) -> Union[str, Dict, None]
+(Abstract async method) Generate a reply based on the received messages.
+
+Arguments:
+
+messages list[dict] - a list of messages received.
+sender - sender of an Agent instance.
+Returns:
+
+str or dict or None: the generated reply. If None, no reply is generated.
+
+
+
+agentchat.assistant_agent
+AssistantAgent Objects​
+class AssistantAgent(ConversableAgent)
+(In preview) Assistant agent, designed to solve a task with LLM.
+
+AssistantAgent is a subclass of ConversableAgent configured with a default system message. The default system message is designed to solve a task with LLM, including suggesting python code blocks and debugging. human_input_mode is default to "NEVER" and code_execution_config is default to False. This agent doesn't execute code by default, and expects the user to execute the code.
+
+__init__​
+def __init__(name: str,
+             system_message: Optional[str] = DEFAULT_SYSTEM_MESSAGE,
+             llm_config: Optional[Union[Dict, Literal[False]]] = None,
+             is_termination_msg: Optional[Callable[[Dict], bool]] = None,
+             max_consecutive_auto_reply: Optional[int] = None,
+             human_input_mode: Optional[str] = "NEVER",
+             code_execution_config: Optional[Union[Dict,
+                                                   Literal[False]]] = False,
+             description: Optional[str] = None,
+             **kwargs)
+Arguments:
+
+name str - agent name.
+system_message str - system message for the ChatCompletion inference. Please override this attribute if you want to reprogram the agent.
+llm_config dict - llm inference configuration. Please refer to OpenAIWrapper.create for available options.
+is_termination_msg function - a function that takes a message in the form of a dictionary and returns a boolean value indicating if this received message is a termination message. The dict can contain the following keys: "content", "role", "name", "function_call".
+max_consecutive_auto_reply int - the maximum number of consecutive auto replies. default to None (no limit provided, class attribute MAX_CONSECUTIVE_AUTO_REPLY will be used as the limit in this case). The limit only plays a role when human_input_mode is not "ALWAYS".
+**kwargs dict - Please refer to other kwargs in ConversableAgent.
+Edit this page
+
+
+agentchat.conversable_agent
+ConversableAgent Objects​
+class ConversableAgent(Agent)
+(In preview) A class for generic conversable agents which can be configured as assistant or user proxy.
+
+After receiving each message, the agent will send a reply to the sender unless the msg is a termination msg. For example, AssistantAgent and UserProxyAgent are subclasses of this class, configured with different default settings.
+
+To modify auto reply, override generate_reply method. To disable/enable human response in every turn, set human_input_mode to "NEVER" or "ALWAYS". To modify the way to get human input, override get_human_input method. To modify the way to execute code blocks, single code block, or function call, override execute_code_blocks, run_code, and execute_function methods respectively. To customize the initial message when a conversation starts, override generate_init_message method.
+
+DEFAULT_CONFIG​
+An empty configuration
+
+MAX_CONSECUTIVE_AUTO_REPLY​
+maximum number of consecutive auto replies (subject to future change)
+
+__init__​
+def __init__(name: str,
+             system_message: Optional[Union[
+                 str, List]] = "You are a helpful AI Assistant.",
+             is_termination_msg: Optional[Callable[[Dict], bool]] = None,
+             max_consecutive_auto_reply: Optional[int] = None,
+             human_input_mode: Optional[str] = "TERMINATE",
+             function_map: Optional[Dict[str, Callable]] = None,
+             code_execution_config: Optional[Union[Dict,
+                                                   Literal[False]]] = None,
+             llm_config: Optional[Union[Dict, Literal[False]]] = None,
+             default_auto_reply: Optional[Union[str, Dict, None]] = "",
+             description: Optional[str] = None)
+Arguments:
+
+name str - name of the agent.
+system_message str or list - system message for the ChatCompletion inference.
+is_termination_msg function - a function that takes a message in the form of a dictionary and returns a boolean value indicating if this received message is a termination message. The dict can contain the following keys: "content", "role", "name", "function_call".
+max_consecutive_auto_reply int - the maximum number of consecutive auto replies. default to None (no limit provided, class attribute MAX_CONSECUTIVE_AUTO_REPLY will be used as the limit in this case). When set to 0, no auto reply will be generated.
+human_input_mode str - whether to ask for human inputs every time a message is received. Possible values are "ALWAYS", "TERMINATE", "NEVER". (1) When "ALWAYS", the agent prompts for human input every time a message is received. Under this mode, the conversation stops when the human input is "exit", or when is_termination_msg is True and there is no human input. (2) When "TERMINATE", the agent only prompts for human input only when a termination message is received or the number of auto reply reaches the max_consecutive_auto_reply. (3) When "NEVER", the agent will never prompt for human input. Under this mode, the conversation stops when the number of auto reply reaches the max_consecutive_auto_reply or when is_termination_msg is True.
+function_map dict[str, callable] - Mapping function names (passed to openai) to callable functions, also used for tool calls.
+code_execution_config dict or False - config for the code execution. To disable code execution, set to False. Otherwise, set to a dictionary with the following keys:
+work_dir (Optional, str): The working directory for the code execution. If None, a default working directory will be used. The default working directory is the "extensions" directory under "path_to_autogen".
+use_docker (Optional, list, str or bool): The docker image to use for code execution. If a list or a str of image name(s) is provided, the code will be executed in a docker container with the first image successfully pulled. If None, False or empty, the code will be executed in the current environment. Default is True when the docker python package is installed. When set to True, a default list will be used. We strongly recommend using docker for code execution.
+timeout (Optional, int): The maximum execution time in seconds.
+last_n_messages (Experimental, Optional, int or str): The number of messages to look back for code execution. Default to 1. If set to 'auto', it will scan backwards through all messages arriving since the agent last spoke (typically this is the last time execution was attempted).
+llm_config dict or False - llm inference configuration. Please refer to OpenAIWrapper.create for available options. To disable llm-based auto reply, set to False.
+default_auto_reply str or dict or None - default auto reply when no code execution or llm-based reply is generated.
+description str - a short description of the agent. This description is used by other agents (e.g. the GroupChatManager) to decide when to call upon this agent. (Default: system_message)
+register_reply​
+def register_reply(trigger: Union[Type[Agent], str, Agent,
+                                  Callable[[Agent], bool], List],
+                   reply_func: Callable,
+                   position: int = 0,
+                   config: Optional[Any] = None,
+                   reset_config: Optional[Callable] = None)
+Register a reply function.
+
+The reply function will be called when the trigger matches the sender. The function registered later will be checked earlier by default. To change the order, set the position to a positive integer.
+
+Arguments:
+
+trigger Agent class, str, Agent instance, callable, or list - the trigger.
+If a class is provided, the reply function will be called when the sender is an instance of the class.
+If a string is provided, the reply function will be called when the sender's name matches the string.
+If an agent instance is provided, the reply function will be called when the sender is the agent instance.
+If a callable is provided, the reply function will be called when the callable returns True.
+If a list is provided, the reply function will be called when any of the triggers in the list is activated.
+If None is provided, the reply function will be called only when the sender is None.
+Note - Be sure to register None as a trigger if you would like to trigger an auto-reply function with non-empty messages and sender=None.
+reply_func Callable - the reply function. The function takes a recipient agent, a list of messages, a sender agent and a config as input and returns a reply message.
+def reply_func(
+    recipient: ConversableAgent,
+    messages: Optional[List[Dict]] = None,
+    sender: Optional[Agent] = None,
+    config: Optional[Any] = None,
+) -> Tuple[bool, Union[str, Dict, None]]:
+position int - the position of the reply function in the reply function list. The function registered later will be checked earlier by default. To change the order, set the position to a positive integer.
+config Any - the config to be passed to the reply function. When an agent is reset, the config will be reset to the original value.
+reset_config Callable - the function to reset the config. The function returns None. Signature: def reset_config(config: Any)
+system_message​
+@property
+def system_message() -> Union[str, List]
+Return the system message.
+
+update_system_message​
+def update_system_message(system_message: Union[str, List])
+Update the system message.
+
+Arguments:
+
+system_message str or List - system message for the ChatCompletion inference.
+update_max_consecutive_auto_reply​
+def update_max_consecutive_auto_reply(value: int,
+                                      sender: Optional[Agent] = None)
+Update the maximum number of consecutive auto replies.
+
+Arguments:
+
+value int - the maximum number of consecutive auto replies.
+sender Agent - when the sender is provided, only update the max_consecutive_auto_reply for that sender.
+max_consecutive_auto_reply​
+def max_consecutive_auto_reply(sender: Optional[Agent] = None) -> int
+The maximum number of consecutive auto replies.
+
+chat_messages​
+@property
+def chat_messages() -> Dict[Agent, List[Dict]]
+A dictionary of conversations from agent to list of messages.
+
+last_message​
+def last_message(agent: Optional[Agent] = None) -> Optional[Dict]
+The last message exchanged with the agent.
+
+Arguments:
+
+agent Agent - The agent in the conversation. If None and more than one agent's conversations are found, an error will be raised. If None and only one conversation is found, the last message of the only conversation will be returned.
+Returns:
+
+The last message exchanged with the agent.
+
+use_docker​
+@property
+def use_docker() -> Union[bool, str, None]
+Bool value of whether to use docker to execute the code, or str value of the docker image name to use, or None when code execution is disabled.
+
+send​
+def send(message: Union[Dict, str],
+         recipient: Agent,
+         request_reply: Optional[bool] = None,
+         silent: Optional[bool] = False)
+Send a message to another agent.
+
+Arguments:
+
+message dict or str - message to be sent. The message could contain the following fields:
+content (str or List): Required, the content of the message. (Can be None)
+function_call (str): the name of the function to be called.
+name (str): the name of the function to be called.
+role (str): the role of the message, any role that is not "function" will be modified to "assistant".
+context (dict): the context of the message, which will be passed to OpenAIWrapper.create. For example, one agent can send a message A as:
+{
+    "content": lambda context: context["use_tool_msg"],
+    "context": {
+        "use_tool_msg": "Use tool X if they are relevant."
+    }
+}
+Next time, one agent can send a message B with a different "use_tool_msg". Then the content of message A will be refreshed to the new "use_tool_msg". So effectively, this provides a way for an agent to send a "link" and modify the content of the "link" later.
+
+recipient Agent - the recipient of the message.
+request_reply bool or None - whether to request a reply from the recipient.
+silent bool or None - (Experimental) whether to print the message sent.
+Raises:
+
+ValueError - if the message can't be converted into a valid ChatCompletion message.
+a_send​
+async def a_send(message: Union[Dict, str],
+                 recipient: Agent,
+                 request_reply: Optional[bool] = None,
+                 silent: Optional[bool] = False)
+(async) Send a message to another agent.
+
+Arguments:
+
+message dict or str - message to be sent. The message could contain the following fields:
+content (str or List): Required, the content of the message. (Can be None)
+function_call (str): the name of the function to be called.
+name (str): the name of the function to be called.
+role (str): the role of the message, any role that is not "function" will be modified to "assistant".
+context (dict): the context of the message, which will be passed to OpenAIWrapper.create. For example, one agent can send a message A as:
+{
+    "content": lambda context: context["use_tool_msg"],
+    "context": {
+        "use_tool_msg": "Use tool X if they are relevant."
+    }
+}
+Next time, one agent can send a message B with a different "use_tool_msg". Then the content of message A will be refreshed to the new "use_tool_msg". So effectively, this provides a way for an agent to send a "link" and modify the content of the "link" later.
+
+recipient Agent - the recipient of the message.
+request_reply bool or None - whether to request a reply from the recipient.
+silent bool or None - (Experimental) whether to print the message sent.
+Raises:
+
+ValueError - if the message can't be converted into a valid ChatCompletion message.
+receive​
+def receive(message: Union[Dict, str],
+            sender: Agent,
+            request_reply: Optional[bool] = None,
+            silent: Optional[bool] = False)
+Receive a message from another agent.
+
+Once a message is received, this function sends a reply to the sender or stop. The reply can be generated automatically or entered manually by a human.
+
+Arguments:
+
+message dict or str - message from the sender. If the type is dict, it may contain the following reserved fields (either content or function_call need to be provided).
+"content": content of the message, can be None.
+"function_call": a dictionary containing the function name and arguments. (deprecated in favor of "tool_calls")
+"tool_calls": a list of dictionaries containing the function name and arguments.
+"role": role of the message, can be "assistant", "user", "function", "tool". This field is only needed to distinguish between "function" or "assistant"/"user".
+"name": In most cases, this field is not needed. When the role is "function", this field is needed to indicate the function name.
+"context" (dict): the context of the message, which will be passed to OpenAIWrapper.create.
+sender - sender of an Agent instance.
+request_reply bool or None - whether a reply is requested from the sender. If None, the value is determined by self.reply_at_receive[sender].
+silent bool or None - (Experimental) whether to print the message received.
+Raises:
+
+ValueError - if the message can't be converted into a valid ChatCompletion message.
+a_receive​
+async def a_receive(message: Union[Dict, str],
+                    sender: Agent,
+                    request_reply: Optional[bool] = None,
+                    silent: Optional[bool] = False)
+(async) Receive a message from another agent.
+
+Once a message is received, this function sends a reply to the sender or stop. The reply can be generated automatically or entered manually by a human.
+
+Arguments:
+
+message dict or str - message from the sender. If the type is dict, it may contain the following reserved fields (either content or function_call need to be provided).
+"content": content of the message, can be None.
+"function_call": a dictionary containing the function name and arguments. (deprecated in favor of "tool_calls")
+"tool_calls": a list of dictionaries containing the function name and arguments.
+"role": role of the message, can be "assistant", "user", "function". This field is only needed to distinguish between "function" or "assistant"/"user".
+"name": In most cases, this field is not needed. When the role is "function", this field is needed to indicate the function name.
+"context" (dict): the context of the message, which will be passed to OpenAIWrapper.create.
+sender - sender of an Agent instance.
+request_reply bool or None - whether a reply is requested from the sender. If None, the value is determined by self.reply_at_receive[sender].
+silent bool or None - (Experimental) whether to print the message received.
+Raises:
+
+ValueError - if the message can't be converted into a valid ChatCompletion message.
+initiate_chat​
+def initiate_chat(recipient: "ConversableAgent",
+                  clear_history: Optional[bool] = True,
+                  silent: Optional[bool] = False,
+                  **context)
+Initiate a chat with the recipient agent.
+
+Reset the consecutive auto reply counter. If clear_history is True, the chat history with the recipient agent will be cleared. generate_init_message is called to generate the initial message for the agent.
+
+Arguments:
+
+recipient - the recipient agent.
+clear_history bool - whether to clear the chat history with the agent.
+silent bool or None - (Experimental) whether to print the messages for this conversation.
+**context - any context information. "message" needs to be provided if the generate_init_message method is not overridden.
+a_initiate_chat​
+async def a_initiate_chat(recipient: "ConversableAgent",
+                          clear_history: Optional[bool] = True,
+                          silent: Optional[bool] = False,
+                          **context)
+(async) Initiate a chat with the recipient agent.
+
+Reset the consecutive auto reply counter. If clear_history is True, the chat history with the recipient agent will be cleared. generate_init_message is called to generate the initial message for the agent.
+
+Arguments:
+
+recipient - the recipient agent.
+clear_history bool - whether to clear the chat history with the agent.
+silent bool or None - (Experimental) whether to print the messages for this conversation.
+**context - any context information. "message" needs to be provided if the generate_init_message method is not overridden.
+reset​
+def reset()
+Reset the agent.
+
+stop_reply_at_receive​
+def stop_reply_at_receive(sender: Optional[Agent] = None)
+Reset the reply_at_receive of the sender.
+
+reset_consecutive_auto_reply_counter​
+def reset_consecutive_auto_reply_counter(sender: Optional[Agent] = None)
+Reset the consecutive_auto_reply_counter of the sender.
+
+clear_history​
+def clear_history(agent: Optional[Agent] = None)
+Clear the chat history of the agent.
+
+Arguments:
+
+agent - the agent with whom the chat history to clear. If None, clear the chat history with all agents.
+generate_oai_reply​
+def generate_oai_reply(
+    messages: Optional[List[Dict]] = None,
+    sender: Optional[Agent] = None,
+    config: Optional[OpenAIWrapper] = None
+) -> Tuple[bool, Union[str, Dict, None]]
+Generate a reply using autogen.oai.
+
+a_generate_oai_reply​
+async def a_generate_oai_reply(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[Any] = None) -> Tuple[bool, Union[str, Dict, None]]
+Generate a reply using autogen.oai asynchronously.
+
+generate_code_execution_reply​
+def generate_code_execution_reply(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[Union[Dict, Literal[False]]] = None)
+Generate a reply using code execution.
+
+generate_function_call_reply​
+def generate_function_call_reply(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[Any] = None) -> Tuple[bool, Union[Dict, None]]
+Generate a reply using function call.
+
+"function_call" replaced by "tool_calls" as of OpenAI API v1.1.0 See https://platform.openai.com/docs/api-reference/chat/create#chat-create-functions
+
+a_generate_function_call_reply​
+async def a_generate_function_call_reply(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[Any] = None) -> Tuple[bool, Union[Dict, None]]
+Generate a reply using async function call.
+
+"function_call" replaced by "tool_calls" as of OpenAI API v1.1.0 See https://platform.openai.com/docs/api-reference/chat/create#chat-create-functions
+
+generate_tool_calls_reply​
+def generate_tool_calls_reply(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[Any] = None) -> Tuple[bool, Union[Dict, None]]
+Generate a reply using tool call.
+
+a_generate_tool_calls_reply​
+async def a_generate_tool_calls_reply(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[Any] = None) -> Tuple[bool, Union[Dict, None]]
+Generate a reply using async function call.
+
+check_termination_and_human_reply​
+def check_termination_and_human_reply(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[Any] = None) -> Tuple[bool, Union[str, None]]
+Check if the conversation should be terminated, and if human reply is provided.
+
+This method checks for conditions that require the conversation to be terminated, such as reaching a maximum number of consecutive auto-replies or encountering a termination message. Additionally, it prompts for and processes human input based on the configured human input mode, which can be 'ALWAYS', 'NEVER', or 'TERMINATE'. The method also manages the consecutive auto-reply counter for the conversation and prints relevant messages based on the human input received.
+
+Arguments:
+
+messages (Optional[List[Dict]]): A list of message dictionaries, representing the conversation history.
+sender (Optional[Agent]): The agent object representing the sender of the message.
+config (Optional[Any]): Configuration object, defaults to the current instance if not provided.
+Returns:
+
+Tuple[bool, Union[str, Dict, None]]: A tuple containing a boolean indicating if the conversation should be terminated, and a human reply which can be a string, a dictionary, or None.
+a_check_termination_and_human_reply​
+async def a_check_termination_and_human_reply(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[Any] = None) -> Tuple[bool, Union[str, None]]
+(async) Check if the conversation should be terminated, and if human reply is provided.
+
+This method checks for conditions that require the conversation to be terminated, such as reaching a maximum number of consecutive auto-replies or encountering a termination message. Additionally, it prompts for and processes human input based on the configured human input mode, which can be 'ALWAYS', 'NEVER', or 'TERMINATE'. The method also manages the consecutive auto-reply counter for the conversation and prints relevant messages based on the human input received.
+
+Arguments:
+
+messages (Optional[List[Dict]]): A list of message dictionaries, representing the conversation history.
+sender (Optional[Agent]): The agent object representing the sender of the message.
+config (Optional[Any]): Configuration object, defaults to the current instance if not provided.
+Returns:
+
+Tuple[bool, Union[str, Dict, None]]: A tuple containing a boolean indicating if the conversation should be terminated, and a human reply which can be a string, a dictionary, or None.
+generate_reply​
+def generate_reply(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        exclude: Optional[List[Callable]] = None) -> Union[str, Dict, None]
+Reply based on the conversation history and the sender.
+
+Either messages or sender must be provided. Register a reply_func with None as one trigger for it to be activated when messages is non-empty and sender is None. Use registered auto reply functions to generate replies. By default, the following functions are checked in order:
+
+check_termination_and_human_reply
+generate_function_call_reply (deprecated in favor of tool_calls)
+generate_tool_calls_reply
+generate_code_execution_reply
+generate_oai_reply Every function returns a tuple (final, reply). When a function returns final=False, the next function will be checked. So by default, termination and human reply will be checked first. If not terminating and human reply is skipped, execute function or code and return the result. AI replies are generated only when no code execution is performed.
+Arguments:
+
+messages - a list of messages in the conversation history.
+default_reply str or dict - default reply.
+sender - sender of an Agent instance.
+exclude - a list of functions to exclude.
+Returns:
+
+str or dict or None: reply. None if no reply is generated.
+
+a_generate_reply​
+async def a_generate_reply(
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        exclude: Optional[List[Callable]] = None) -> Union[str, Dict, None]
+(async) Reply based on the conversation history and the sender.
+
+Either messages or sender must be provided. Register a reply_func with None as one trigger for it to be activated when messages is non-empty and sender is None. Use registered auto reply functions to generate replies. By default, the following functions are checked in order:
+
+check_termination_and_human_reply
+generate_function_call_reply
+generate_tool_calls_reply
+generate_code_execution_reply
+generate_oai_reply Every function returns a tuple (final, reply). When a function returns final=False, the next function will be checked. So by default, termination and human reply will be checked first. If not terminating and human reply is skipped, execute function or code and return the result. AI replies are generated only when no code execution is performed.
+Arguments:
+
+messages - a list of messages in the conversation history.
+default_reply str or dict - default reply.
+sender - sender of an Agent instance.
+exclude - a list of functions to exclude.
+Returns:
+
+str or dict or None: reply. None if no reply is generated.
+
+get_human_input​
+def get_human_input(prompt: str) -> str
+Get human input.
+
+Override this method to customize the way to get human input.
+
+Arguments:
+
+prompt str - prompt for the human input.
+Returns:
+
+str - human input.
+a_get_human_input​
+async def a_get_human_input(prompt: str) -> str
+(Async) Get human input.
+
+Override this method to customize the way to get human input.
+
+Arguments:
+
+prompt str - prompt for the human input.
+Returns:
+
+str - human input.
+run_code​
+def run_code(code, **kwargs)
+Run the code and return the result.
+
+Override this function to modify the way to run the code.
+
+Arguments:
+
+code str - the code to be executed.
+**kwargs - other keyword arguments.
+Returns:
+
+A tuple of (exitcode, logs, image).
+
+exitcode int - the exit code of the code execution.
+logs str - the logs of the code execution.
+image str or None - the docker image used for the code execution.
+execute_code_blocks​
+def execute_code_blocks(code_blocks)
+Execute the code blocks and return the result.
+
+execute_function​
+def execute_function(func_call,
+                     verbose: bool = False) -> Tuple[bool, Dict[str, str]]
+Execute a function call and return the result.
+
+Override this function to modify the way to execute function and tool calls.
+
+Arguments:
+
+func_call - a dictionary extracted from openai message at "function_call" or "tool_calls" with keys "name" and "arguments".
+Returns:
+
+A tuple of (is_exec_success, result_dict).
+
+is_exec_success boolean - whether the execution is successful.
+
+result_dict - a dictionary with keys "name", "role", and "content". Value of "role" is "function".
+
+"function_call" deprecated as of OpenAI API v1.1.0 See https://platform.openai.com/docs/api-reference/chat/create#chat-create-function_call
+
+a_execute_function​
+async def a_execute_function(func_call)
+Execute an async function call and return the result.
+
+Override this function to modify the way async functions and tools are executed.
+
+Arguments:
+
+func_call - a dictionary extracted from openai message at key "function_call" or "tool_calls" with keys "name" and "arguments".
+Returns:
+
+A tuple of (is_exec_success, result_dict).
+
+is_exec_success boolean - whether the execution is successful.
+
+result_dict - a dictionary with keys "name", "role", and "content". Value of "role" is "function".
+
+"function_call" deprecated as of OpenAI API v1.1.0 See https://platform.openai.com/docs/api-reference/chat/create#chat-create-function_call
+
+generate_init_message​
+def generate_init_message(**context) -> Union[str, Dict]
+Generate the initial message for the agent.
+
+Override this function to customize the initial message based on user's request. If not overridden, "message" needs to be provided in the context.
+
+Arguments:
+
+**context - any context information, and "message" parameter needs to be provided.
+register_function​
+def register_function(function_map: Dict[str, Callable])
+Register functions to the agent.
+
+Arguments:
+
+function_map - a dictionary mapping function names to functions.
+update_function_signature​
+def update_function_signature(func_sig: Union[str, Dict], is_remove: None)
+update a function_signature in the LLM configuration for function_call.
+
+Arguments:
+
+func_sig str or dict - description/name of the function to update/remove to the model. See: https://platform.openai.com/docs/api-reference/chat/create#chat/create-functions
+
+is_remove - whether removing the function from llm_config with name 'func_sig'
+
+Deprecated as of OpenAI API v1.1.0 See https://platform.openai.com/docs/api-reference/chat/create#chat-create-function_call
+
+update_tool_signature​
+def update_tool_signature(tool_sig: Union[str, Dict], is_remove: None)
+update a tool_signature in the LLM configuration for tool_call.
+
+Arguments:
+
+tool_sig str or dict - description/name of the tool to update/remove to the model. See: https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools
+is_remove - whether removing the tool from llm_config with name 'tool_sig'
+can_execute_function​
+def can_execute_function(name: Union[List[str], str]) -> bool
+Whether the agent can execute the function.
+
+function_map​
+@property
+def function_map() -> Dict[str, Callable]
+Return the function map.
+
+register_for_llm​
+def register_for_llm(*,
+                     name: Optional[str] = None,
+                     description: Optional[str] = None) -> Callable[[F], F]
+Decorator factory for registering a function to be used by an agent.
+
+It's return value is used to decorate a function to be registered to the agent. The function uses type hints to specify the arguments and return type. The function name is used as the default name for the function, but a custom name can be provided. The function description is used to describe the function in the agent's configuration.
+
+Arguments:
+
+name (optional(str)): name of the function. If None, the function name will be used (default: None). description (optional(str)): description of the function (default: None). It is mandatory for the initial decorator, but the following ones can omit it.
+
+Returns:
+
+The decorator for registering a function to be used by an agent.
+
+Examples:
+
+```
+@user_proxy.register_for_execution()
+@agent2.register_for_llm()
+@agent1.register_for_llm(description="This is a very useful function")
+def my_function(a: Annotated[str, "description of a parameter"] = "a", b: int, c=3.14) -> str:
+     return a + str(b * c)
+```
+register_for_execution​
+def register_for_execution(name: Optional[str] = None) -> Callable[[F], F]
+Decorator factory for registering a function to be executed by an agent.
+
+It's return value is used to decorate a function to be registered to the agent.
+
+Arguments:
+
+name (optional(str)): name of the function. If None, the function name will be used (default: None).
+
+Returns:
+
+The decorator for registering a function to be used by an agent.
+
+Examples:
+
+```
+@user_proxy.register_for_execution()
+@agent2.register_for_llm()
+@agent1.register_for_llm(description="This is a very useful function")
+def my_function(a: Annotated[str, "description of a parameter"] = "a", b: int, c=3.14):
+     return a + str(b * c)
+```
+register_hook​
+def register_hook(hookable_method: Callable, hook: Callable)
+Registers a hook to be called by a hookable method, in order to add a capability to the agent. Registered hooks are kept in lists (one per hookable method), and are called in their order of registration.
+
+Arguments:
+
+hookable_method - A hookable method implemented by ConversableAgent.
+hook - A method implemented by a subclass of AgentCapability.
+process_last_message​
+def process_last_message(messages)
+Calls any registered capability hooks to use and potentially modify the text of the last message, as long as the last message is not a function call or exit command.
+
+Edit this page
+
+
+agentchat.groupchat
+GroupChat Objects​
+@dataclass
+class GroupChat()
+(In preview) A group chat class that contains the following data fields:
+
+agents: a list of participating agents.
+messages: a list of messages in the group chat.
+max_round: the maximum number of rounds.
+admin_name: the name of the admin agent if there is one. Default is "Admin". KeyBoardInterrupt will make the admin agent take over.
+func_call_filter: whether to enforce function call filter. Default is True. When set to True and when a message is a function call suggestion, the next speaker will be chosen from an agent which contains the corresponding function name in its function_map.
+speaker_selection_method: the method for selecting the next speaker. Default is "auto". Could be any of the following (case insensitive), will raise ValueError if not recognized:
+"auto": the next speaker is selected automatically by LLM.
+"manual": the next speaker is selected manually by user input.
+"random": the next speaker is selected randomly.
+"round_robin": the next speaker is selected in a round robin fashion, i.e., iterating in the same order as provided in agents.
+allow_repeat_speaker: whether to allow the same speaker to speak consecutively. Default is True, in which case all speakers are allowed to speak consecutively. If allow_repeat_speaker is a list of Agents, then only those listed agents are allowed to repeat. If set to False, then no speakers are allowed to repeat.
+agent_names​
+@property
+def agent_names() -> List[str]
+Return the names of the agents in the group chat.
+
+reset​
+def reset()
+Reset the group chat.
+
+append​
+def append(message: Dict)
+Append a message to the group chat. We cast the content to str here so that it can be managed by text-based model.
+
+agent_by_name​
+def agent_by_name(name: str) -> Agent
+Returns the agent with a given name.
+
+next_agent​
+def next_agent(agent: Agent, agents: Optional[List[Agent]] = None) -> Agent
+Return the next agent in the list.
+
+select_speaker_msg​
+def select_speaker_msg(agents: Optional[List[Agent]] = None) -> str
+Return the system message for selecting the next speaker. This is always the first message in the context.
+
+select_speaker_prompt​
+def select_speaker_prompt(agents: Optional[List[Agent]] = None) -> str
+Return the floating system prompt selecting the next speaker. This is always the last message in the context.
+
+manual_select_speaker​
+def manual_select_speaker(
+        agents: Optional[List[Agent]] = None) -> Union[Agent, None]
+Manually select the next speaker.
+
+select_speaker​
+def select_speaker(last_speaker: Agent, selector: ConversableAgent)
+Select the next speaker.
+
+a_select_speaker​
+async def a_select_speaker(last_speaker: Agent, selector: ConversableAgent)
+Select the next speaker.
+
+GroupChatManager Objects​
+class GroupChatManager(ConversableAgent)
+(In preview) A chat manager agent that can manage a group chat of multiple agents.
+
+run_chat​
+def run_chat(messages: Optional[List[Dict]] = None,
+             sender: Optional[Agent] = None,
+             config: Optional[GroupChat] = None) -> Union[str, Dict, None]
+Run a group chat.
+
+a_run_chat​
+async def a_run_chat(messages: Optional[List[Dict]] = None,
+                     sender: Optional[Agent] = None,
+                     config: Optional[GroupChat] = None)
+Run a group chat asynchronously.
+
+
+agentchat.user_proxy_agent
+UserProxyAgent Objects​
+class UserProxyAgent(ConversableAgent)
+(In preview) A proxy agent for the user, that can execute code and provide feedback to the other agents.
+
+UserProxyAgent is a subclass of ConversableAgent configured with human_input_mode to ALWAYS and llm_config to False. By default, the agent will prompt for human input every time a message is received. Code execution is enabled by default. LLM-based auto reply is disabled by default. To modify auto reply, register a method with register_reply. To modify the way to get human input, override get_human_input method. To modify the way to execute code blocks, single code block, or function call, override execute_code_blocks, run_code, and execute_function methods respectively. To customize the initial message when a conversation starts, override generate_init_message method.
+
+__init__​
+def __init__(name: str,
+             is_termination_msg: Optional[Callable[[Dict], bool]] = None,
+             max_consecutive_auto_reply: Optional[int] = None,
+             human_input_mode: Optional[str] = "ALWAYS",
+             function_map: Optional[Dict[str, Callable]] = None,
+             code_execution_config: Optional[Union[Dict,
+                                                   Literal[False]]] = None,
+             default_auto_reply: Optional[Union[str, Dict, None]] = "",
+             llm_config: Optional[Union[Dict, Literal[False]]] = False,
+             system_message: Optional[Union[str, List]] = "",
+             description: Optional[str] = None)
+Arguments:
+
+name str - name of the agent.
+is_termination_msg function - a function that takes a message in the form of a dictionary and returns a boolean value indicating if this received message is a termination message. The dict can contain the following keys: "content", "role", "name", "function_call".
+max_consecutive_auto_reply int - the maximum number of consecutive auto replies. default to None (no limit provided, class attribute MAX_CONSECUTIVE_AUTO_REPLY will be used as the limit in this case). The limit only plays a role when human_input_mode is not "ALWAYS".
+human_input_mode str - whether to ask for human inputs every time a message is received. Possible values are "ALWAYS", "TERMINATE", "NEVER". (1) When "ALWAYS", the agent prompts for human input every time a message is received. Under this mode, the conversation stops when the human input is "exit", or when is_termination_msg is True and there is no human input. (2) When "TERMINATE", the agent only prompts for human input only when a termination message is received or the number of auto reply reaches the max_consecutive_auto_reply. (3) When "NEVER", the agent will never prompt for human input. Under this mode, the conversation stops when the number of auto reply reaches the max_consecutive_auto_reply or when is_termination_msg is True.
+function_map dict[str, callable] - Mapping function names (passed to openai) to callable functions.
+code_execution_config dict or False - config for the code execution. To disable code execution, set to False. Otherwise, set to a dictionary with the following keys:
+work_dir (Optional, str): The working directory for the code execution. If None, a default working directory will be used. The default working directory is the "extensions" directory under "path_to_autogen".
+use_docker (Optional, list, str or bool): The docker image to use for code execution. If a list or a str of image name(s) is provided, the code will be executed in a docker container with the first image successfully pulled. If None, False or empty, the code will be executed in the current environment. Default is True, which will be converted into a list. If the code is executed in the current environment, the code must be trusted.
+timeout (Optional, int): The maximum execution time in seconds.
+last_n_messages (Experimental, Optional, int): The number of messages to look back for code execution. Default to 1.
+default_auto_reply str or dict or None - the default auto reply message when no code execution or llm based reply is generated.
+llm_config dict or False - llm inference configuration. Please refer to OpenAIWrapper.create for available options. Default to false, which disables llm-based auto reply.
+system_message str or List - system message for ChatCompletion inference. Only used when llm_config is not False. Use it to reprogram the agent.
+description str - a short description of the agent. This description is used by other agents (e.g. the GroupChatManager) to decide when to call upon this agent. (Default: system_message)
+
+oai.client
+OpenAIWrapper Objects​
+class OpenAIWrapper()
+A wrapper class for openai client.
+
+__init__​
+def __init__(*, config_list: List[Dict] = None, **base_config)
+Arguments:
+
+config_list - a list of config dicts to override the base_config. They can contain additional kwargs as allowed in the create method. E.g.,
+config_list=[
+    {
+        "model": "gpt-4",
+        "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
+        "api_type": "azure",
+        "base_url": os.environ.get("AZURE_OPENAI_API_BASE"),
+        "api_version": "2023-03-15-preview",
+    },
+    {
+        "model": "gpt-3.5-turbo",
+        "api_key": os.environ.get("OPENAI_API_KEY"),
+        "api_type": "open_ai",
+        "base_url": "https://api.openai.com/v1",
+    },
+    {
+        "model": "llama-7B",
+        "base_url": "http://127.0.0.1:8080",
+        "api_type": "open_ai",
+    }
+]
+base_config - base config. It can contain both keyword arguments for openai client and additional kwargs.
+create​
+def create(**config)
+Make a completion for a given config using openai's clients. Besides the kwargs allowed in openai's client, we allow the following additional kwargs. The config in each client will be overridden by the config.
+
+Arguments:
+
+context (Dict | None): The context to instantiate the prompt or messages. Default to None. It needs to contain keys that are used by the prompt template or the filter function. E.g., prompt="Complete the following sentence: {prefix}, context={"prefix": "Today I feel"}. The actual prompt will be: "Complete the following sentence: Today I feel". More examples can be found at templating.
+cache_seed (int | None) for the cache. Default to 41. An integer cache_seed is useful when implementing "controlled randomness" for the completion. None for no caching.
+filter_func (Callable | None): A function that takes in the context and the response and returns a boolean to indicate whether the response is valid. E.g.,
+def yes_or_no_filter(context, response):
+    return context.get("yes_or_no_choice", False) is False or any(
+        text in ["Yes.", "No."] for text in client.extract_text_or_completion_object(response)
+    )
+allow_format_str_template (bool | None): Whether to allow format string template in the config. Default to false.
+api_version (str | None): The api version. Default to None. E.g., "2023-08-01-preview".
+print_usage_summary​
+def print_usage_summary(
+        mode: Union[str, List[str]] = ["actual", "total"]) -> None
+Print the usage summary.
+
+clear_usage_summary​
+def clear_usage_summary() -> None
+Clear the usage summary.
+
+cost​
+def cost(response: Union[ChatCompletion, Completion]) -> float
+Calculate the cost of the response.
+
+extract_text_or_completion_object​
+@classmethod
+def extract_text_or_completion_object(
+    cls, response: ChatCompletion | Completion
+) -> Union[List[str], List[ChatCompletionMessage]]
+Extract the text or ChatCompletion objects from a completion or chat response.
+
+Arguments:
+
+response ChatCompletion | Completion - The response from openai.
+Returns:
+
+A list of text, or a list of ChatCompletion objects if function_call/tool_calls are present.
+
+oai.completion
+Completion Objects​
+class Completion(openai_Completion)
+(openai<1) A class for OpenAI completion API.
+
+It also supports: ChatCompletion, Azure OpenAI API.
+
+set_cache​
+@classmethod
+def set_cache(cls,
+              seed: Optional[int] = 41,
+              cache_path_root: Optional[str] = ".cache")
+Set cache path.
+
+Arguments:
+
+seed int, Optional - The integer identifier for the pseudo seed. Results corresponding to different seeds will be cached in different places.
+cache_path str, Optional - The root path for the cache. The complete cache path will be {cache_path}/{seed}.
+clear_cache​
+@classmethod
+def clear_cache(cls,
+                seed: Optional[int] = None,
+                cache_path_root: Optional[str] = ".cache")
+Clear cache.
+
+Arguments:
+
+seed int, Optional - The integer identifier for the pseudo seed. If omitted, all caches under cache_path_root will be cleared.
+cache_path str, Optional - The root path for the cache. The complete cache path will be {cache_path}/{cache_seed}.
+tune​
+@classmethod
+def tune(cls,
+         data: List[Dict],
+         metric: str,
+         mode: str,
+         eval_func: Callable,
+         log_file_name: Optional[str] = None,
+         inference_budget: Optional[float] = None,
+         optimization_budget: Optional[float] = None,
+         num_samples: Optional[int] = 1,
+         logging_level: Optional[int] = logging.WARNING,
+         **config)
+Tune the parameters for the OpenAI API call.
+
+TODO: support parallel tuning with ray or spark. TODO: support agg_method as in test
+
+Arguments:
+
+data list - The list of data points.
+metric str - The metric to optimize.
+mode str - The optimization mode, "min" or "max.
+eval_func Callable - The evaluation function for responses. The function should take a list of responses and a data point as input, and return a dict of metrics. For example,
+def eval_func(responses, **data):
+    solution = data["solution"]
+    success_list = []
+    n = len(responses)
+    for i in range(n):
+        response = responses[i]
+        succeed = is_equiv_chain_of_thought(response, solution)
+        success_list.append(succeed)
+    return {
+        "expected_success": 1 - pow(1 - sum(success_list) / n, n),
+        "success": any(s for s in success_list),
+    }
+log_file_name str, optional - The log file.
+inference_budget float, optional - The inference budget, dollar per instance.
+optimization_budget float, optional - The optimization budget, dollar in total.
+num_samples int, optional - The number of samples to evaluate. -1 means no hard restriction in the number of trials and the actual number is decided by optimization_budget. Defaults to 1.
+logging_level optional - logging level. Defaults to logging.WARNING.
+**config dict - The search space to update over the default search. For prompt, please provide a string/Callable or a list of strings/Callables.
+If prompt is provided for chat models, it will be converted to messages under role "user".
+Do not provide both prompt and messages for chat models, but provide either of them.
+A string template will be used to generate a prompt for each data instance using prompt.format(**data).
+A callable template will be used to generate a prompt for each data instance using prompt(data). For stop, please provide a string, a list of strings, or a list of lists of strings. For messages (chat models only), please provide a list of messages (for a single chat prefix) or a list of lists of messages (for multiple choices of chat prefix to choose from). Each message should be a dict with keys "role" and "content". The value of "content" can be a string/Callable template.
+Returns:
+
+dict - The optimized hyperparameter setting.
+tune.ExperimentAnalysis - The tuning results.
+create​
+@classmethod
+def create(cls,
+           context: Optional[Dict] = None,
+           use_cache: Optional[bool] = True,
+           config_list: Optional[List[Dict]] = None,
+           filter_func: Optional[Callable[[Dict, Dict], bool]] = None,
+           raise_on_ratelimit_or_timeout: Optional[bool] = True,
+           allow_format_str_template: Optional[bool] = False,
+           **config)
+Make a completion for a given context.
+
+Arguments:
+
+context Dict, Optional - The context to instantiate the prompt. It needs to contain keys that are used by the prompt template or the filter function. E.g., prompt="Complete the following sentence: {prefix}, context={"prefix": "Today I feel"}. The actual prompt will be: "Complete the following sentence: Today I feel". More examples can be found at templating.
+use_cache bool, Optional - Whether to use cached responses.
+config_list List, Optional - List of configurations for the completion to try. The first one that does not raise an error will be used. Only the differences from the default config need to be provided. E.g.,
+response = oai.Completion.create(
+    config_list=[
+        {
+            "model": "gpt-4",
+            "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
+            "api_type": "azure",
+            "base_url": os.environ.get("AZURE_OPENAI_API_BASE"),
+            "api_version": "2023-03-15-preview",
+        },
+        {
+            "model": "gpt-3.5-turbo",
+            "api_key": os.environ.get("OPENAI_API_KEY"),
+            "api_type": "open_ai",
+            "base_url": "https://api.openai.com/v1",
+        },
+        {
+            "model": "llama-7B",
+            "base_url": "http://127.0.0.1:8080",
+            "api_type": "open_ai",
+        }
+    ],
+    prompt="Hi",
+)
+filter_func Callable, Optional - A function that takes in the context and the response and returns a boolean to indicate whether the response is valid. E.g.,
+def yes_or_no_filter(context, config, response):
+    return context.get("yes_or_no_choice", False) is False or any(
+        text in ["Yes.", "No."] for text in oai.Completion.extract_text(response)
+    )
+raise_on_ratelimit_or_timeout bool, Optional - Whether to raise RateLimitError or Timeout when all configs fail. When set to False, -1 will be returned when all configs fail.
+allow_format_str_template bool, Optional - Whether to allow format string template in the config.
+**config - Configuration for the openai API call. This is used as parameters for calling openai API. The "prompt" or "messages" parameter can contain a template (str or Callable) which will be instantiated with the context. Besides the parameters for the openai API call, it can also contain:
+max_retry_period (int): the total time (in seconds) allowed for retrying failed requests.
+retry_wait_time (int): the time interval to wait (in seconds) before retrying a failed request.
+cache_seed (int) for the cache. This is useful when implementing "controlled randomness" for the completion.
+Returns:
+
+Responses from OpenAI API, with additional fields.
+
+cost: the total cost. When config_list is provided, the response will contain a few more fields:
+config_id: the index of the config in the config_list that is used to generate the response.
+pass_filter: whether the response passes the filter function. None if no filter is provided.
+test​
+@classmethod
+def test(cls,
+         data,
+         eval_func=None,
+         use_cache=True,
+         agg_method="avg",
+         return_responses_and_per_instance_result=False,
+         logging_level=logging.WARNING,
+         **config)
+Evaluate the responses created with the config for the OpenAI API call.
+
+Arguments:
+
+data list - The list of test data points.
+eval_func Callable - The evaluation function for responses per data instance. The function should take a list of responses and a data point as input, and return a dict of metrics. You need to either provide a valid callable eval_func; or do not provide one (set None) but call the test function after calling the tune function in which a eval_func is provided. In the latter case we will use the eval_func provided via tune function. Defaults to None.
+def eval_func(responses, **data):
+    solution = data["solution"]
+    success_list = []
+    n = len(responses)
+    for i in range(n):
+        response = responses[i]
+        succeed = is_equiv_chain_of_thought(response, solution)
+        success_list.append(succeed)
+    return {
+        "expected_success": 1 - pow(1 - sum(success_list) / n, n),
+        "success": any(s for s in success_list),
+    }
+use_cache bool, Optional - Whether to use cached responses. Defaults to True.
+agg_method str, Callable or a dict of Callable - Result aggregation method (across multiple instances) for each of the metrics. Defaults to 'avg'. An example agg_method in str:
+agg_method = 'median'
+An example agg_method in a Callable:
+
+agg_method = np.median
+An example agg_method in a dict of Callable:
+
+agg_method={'median_success': np.median, 'avg_success': np.mean}
+return_responses_and_per_instance_result bool - Whether to also return responses and per instance results in addition to the aggregated results.
+logging_level optional - logging level. Defaults to logging.WARNING.
+**config dict - parameters passed to the openai api call create().
+Returns:
+
+None when no valid eval_func is provided in either test or tune; Otherwise, a dict of aggregated results, responses and per instance results if return_responses_and_per_instance_result is True; Otherwise, a dict of aggregated results (responses and per instance results are not returned).
+
+cost​
+@classmethod
+def cost(cls, response: dict)
+Compute the cost of an API call.
+
+Arguments:
+
+response dict - The response from OpenAI API.
+Returns:
+
+The cost in USD. 0 if the model is not supported.
+
+extract_text​
+@classmethod
+def extract_text(cls, response: dict) -> List[str]
+Extract the text from a completion or chat response.
+
+Arguments:
+
+response dict - The response from OpenAI API.
+Returns:
+
+A list of text in the responses.
+
+extract_text_or_function_call​
+@classmethod
+def extract_text_or_function_call(cls, response: dict) -> List[str]
+Extract the text or function calls from a completion or chat response.
+
+Arguments:
+
+response dict - The response from OpenAI API.
+Returns:
+
+A list of text or function calls in the responses.
+
+logged_history​
+@classmethod
+@property
+def logged_history(cls) -> Dict
+Return the book keeping dictionary.
+
+print_usage_summary​
+@classmethod
+def print_usage_summary(cls) -> Dict
+Return the usage summary.
+
+start_logging​
+@classmethod
+def start_logging(cls,
+                  history_dict: Optional[Dict] = None,
+                  compact: Optional[bool] = True,
+                  reset_counter: Optional[bool] = True)
+Start book keeping.
+
+Arguments:
+
+history_dict Dict - A dictionary for book keeping. If no provided, a new one will be created.
+compact bool - Whether to keep the history dictionary compact. Compact history contains one key per conversation, and the value is a dictionary like:
+{
+    "create_at": [0, 1],
+    "cost": [0.1, 0.2],
+}
+where "created_at" is the index of API calls indicating the order of all the calls, and "cost" is the cost of each call. This example shows that the conversation is based on two API calls. The compact format is useful for condensing the history of a conversation. If compact is False, the history dictionary will contain all the API calls: the key is the index of the API call, and the value is a dictionary like:
+
+{
+    "request": request_dict,
+    "response": response_dict,
+}
+where request_dict is the request sent to OpenAI API, and response_dict is the response. For a conversation containing two API calls, the non-compact history dictionary will be like:
+
+{
+    0: {
+        "request": request_dict_0,
+        "response": response_dict_0,
+    },
+    1: {
+        "request": request_dict_1,
+        "response": response_dict_1,
+    },
+The first request's messages plus the response is equal to the second request's messages. For a conversation with many turns, the non-compact history dictionary has a quadratic size while the compact history dict has a linear size.
+
+reset_counter bool - whether to reset the counter of the number of API calls.
+stop_logging​
+@classmethod
+def stop_logging(cls)
+End book keeping.
+
+ChatCompletion Objects​
+class ChatCompletion(Completion)
+(openai<1) A class for OpenAI API ChatCompletion. Share the same API as Completion.
+
+oai.openai_utils
+get_key​
+def get_key(config)
+Get a unique identifier of a configuration.
+
+Arguments:
+
+config dict or list - A configuration.
+Returns:
+
+tuple - A unique identifier which can be used as a key for a dict.
+get_config_list​
+def get_config_list(api_keys: List,
+                    base_urls: Optional[List] = None,
+                    api_type: Optional[str] = None,
+                    api_version: Optional[str] = None) -> List[Dict]
+Get a list of configs for OpenAI API client.
+
+Arguments:
+
+api_keys list - The api keys for openai api calls.
+base_urls list, optional - The api bases for openai api calls. If provided, should match the length of api_keys.
+api_type str, optional - The api type for openai api calls.
+api_version str, optional - The api version for openai api calls.
+Returns:
+
+list - A list of configs for OepnAI API calls.
+Example:
+
+# Define a list of API keys
+api_keys = ['key1', 'key2', 'key3']
+
+# Optionally, define a list of base URLs corresponding to each API key
+base_urls = ['https://api.service1.com', 'https://api.service2.com', 'https://api.service3.com']
+
+# Optionally, define the API type and version if they are common for all keys
+api_type = 'azure'
+api_version = '2023-08-01-preview'
+
+# Call the get_config_list function to get a list of configuration dictionaries
+config_list = get_config_list(api_keys, base_urls, api_type, api_version)
+config_list_openai_aoai​
+def config_list_openai_aoai(
+        key_file_path: Optional[str] = ".",
+        openai_api_key_file: Optional[str] = "key_openai.txt",
+        aoai_api_key_file: Optional[str] = "key_aoai.txt",
+        openai_api_base_file: Optional[str] = "base_openai.txt",
+        aoai_api_base_file: Optional[str] = "base_aoai.txt",
+        exclude: Optional[str] = None) -> List[Dict]
+Get a list of configs for OpenAI API client (including Azure or local model deployments that support OpenAI's chat completion API).
+
+This function constructs configurations by reading API keys and base URLs from environment variables or text files. It supports configurations for both OpenAI and Azure OpenAI services, allowing for the exclusion of one or the other. When text files are used, the environment variables will be overwritten. To prevent text files from being used, set the corresponding file name to None. Or set key_file_path to None to disallow reading from text files.
+
+Arguments:
+
+key_file_path str, optional - The directory path where the API key files are located. Defaults to the current directory.
+openai_api_key_file str, optional - The filename containing the OpenAI API key. Defaults to 'key_openai.txt'.
+aoai_api_key_file str, optional - The filename containing the Azure OpenAI API key. Defaults to 'key_aoai.txt'.
+openai_api_base_file str, optional - The filename containing the OpenAI API base URL. Defaults to 'base_openai.txt'.
+aoai_api_base_file str, optional - The filename containing the Azure OpenAI API base URL. Defaults to 'base_aoai.txt'.
+exclude str, optional - The API type to exclude from the configuration list. Can be 'openai' or 'aoai'. Defaults to None.
+Returns:
+
+List[Dict] - A list of configuration dictionaries. Each dictionary contains keys for 'api_key', 'base_url', 'api_type', and 'api_version'.
+Raises:
+
+FileNotFoundError - If the specified key files are not found and the corresponding API key is not set in the environment variables.
+Example:
+
+To generate configurations excluding Azure OpenAI:
+configs = config_list_openai_aoai(exclude='aoai')
+
+File samples:
+
+key_aoai.txt
+
+aoai-12345abcdef67890ghijklmnopqr
+aoai-09876zyxwvuts54321fedcba
+base_aoai.txt
+
+https://api.azure.com/v1
+https://api.azure2.com/v1
+Notes:
+
+The function checks for API keys and base URLs in the following environment variables: 'OPENAI_API_KEY', 'AZURE_OPENAI_API_KEY', 'OPENAI_API_BASE' and 'AZURE_OPENAI_API_BASE'. If these are not found, it attempts to read from the specified files in the 'key_file_path' directory.
+The API version for Azure configurations is set to DEFAULT_AZURE_API_VERSION by default.
+If 'exclude' is set to 'openai', only Azure OpenAI configurations are returned, and vice versa.
+The function assumes that the API keys and base URLs in the environment variables are separated by new lines if there are multiple entries.
+config_list_from_models​
+def config_list_from_models(
+        key_file_path: Optional[str] = ".",
+        openai_api_key_file: Optional[str] = "key_openai.txt",
+        aoai_api_key_file: Optional[str] = "key_aoai.txt",
+        aoai_api_base_file: Optional[str] = "base_aoai.txt",
+        exclude: Optional[str] = None,
+        model_list: Optional[list] = None) -> List[Dict]
+Get a list of configs for API calls with models specified in the model list.
+
+This function extends config_list_openai_aoai by allowing to clone its' out for each of the models provided. Each configuration will have a 'model' key with the model name as its value. This is particularly useful when all endpoints have same set of models.
+
+Arguments:
+
+key_file_path str, optional - The path to the key files.
+openai_api_key_file str, optional - The file name of the OpenAI API key.
+aoai_api_key_file str, optional - The file name of the Azure OpenAI API key.
+aoai_api_base_file str, optional - The file name of the Azure OpenAI API base.
+exclude str, optional - The API type to exclude, "openai" or "aoai".
+model_list list, optional - The list of model names to include in the configs.
+Returns:
+
+list - A list of configs for OpenAI API calls, each including model information.
+Example:
+
+    # Define the path where the API key files are located
+    key_file_path = '/path/to/key/files'
+
+    # Define the file names for the OpenAI and Azure OpenAI API keys and bases
+    openai_api_key_file = 'key_openai.txt'
+    aoai_api_key_file = 'key_aoai.txt'
+    aoai_api_base_file = 'base_aoai.txt'
+
+    # Define the list of models for which to create configurations
+    model_list = ['gpt-4', 'gpt-3.5-turbo']
+
+    # Call the function to get a list of configuration dictionaries
+    config_list = config_list_from_models(
+        key_file_path=key_file_path,
+        openai_api_key_file=openai_api_key_file,
+        aoai_api_key_file=aoai_api_key_file,
+        aoai_api_base_file=aoai_api_base_file,
+        model_list=model_list
+    )
+
+    # The `config_list` will contain configurations for the specified models, for example:
+    # [
+    #     {'api_key': '...', 'base_url': 'https://api.openai.com', 'model': 'gpt-4'},
+    #     {'api_key': '...', 'base_url': 'https://api.openai.com', 'model': 'gpt-3.5-turbo'}
+    # ]
+config_list_gpt4_gpt35​
+def config_list_gpt4_gpt35(
+        key_file_path: Optional[str] = ".",
+        openai_api_key_file: Optional[str] = "key_openai.txt",
+        aoai_api_key_file: Optional[str] = "key_aoai.txt",
+        aoai_api_base_file: Optional[str] = "base_aoai.txt",
+        exclude: Optional[str] = None) -> List[Dict]
+Get a list of configs for 'gpt-4' followed by 'gpt-3.5-turbo' API calls.
+
+Arguments:
+
+key_file_path str, optional - The path to the key files.
+openai_api_key_file str, optional - The file name of the openai api key.
+aoai_api_key_file str, optional - The file name of the azure openai api key.
+aoai_api_base_file str, optional - The file name of the azure openai api base.
+exclude str, optional - The api type to exclude, "openai" or "aoai".
+Returns:
+
+list - A list of configs for openai api calls.
+filter_config​
+def filter_config(config_list, filter_dict)
+This function filters config_list by checking each configuration dictionary against the criteria specified in filter_dict. A configuration dictionary is retained if for every key in filter_dict, see example below.
+
+Arguments:
+
+config_list list of dict - A list of configuration dictionaries to be filtered.
+filter_dict dict - A dictionary representing the filter criteria, where each key is a field name to check within the configuration dictionaries, and the corresponding value is a list of acceptable values for that field.
+Returns:
+
+list of dict: A list of configuration dictionaries that meet all the criteria specified in filter_dict.
+
+Example:
+
+    # Example configuration list with various models and API types
+    configs = [
+        {'model': 'gpt-3.5-turbo', 'api_type': 'openai'},
+        {'model': 'gpt-4', 'api_type': 'openai'},
+        {'model': 'gpt-3.5-turbo', 'api_type': 'azure'},
+    ]
+
+    # Define filter criteria to select configurations for the 'gpt-3.5-turbo' model
+    # that are also using the 'openai' API type
+    filter_criteria = {
+        'model': ['gpt-3.5-turbo'],  # Only accept configurations for 'gpt-3.5-turbo'
+        'api_type': ['openai']       # Only accept configurations for 'openai' API type
+    }
+
+    # Apply the filter to the configuration list
+    filtered_configs = filter_config(configs, filter_criteria)
+
+    # The resulting `filtered_configs` will be:
+    # [{'model': 'gpt-3.5-turbo', 'api_type': 'openai'}]
+Notes:
+
+If filter_dict is empty or None, no filtering is applied and config_list is returned as is.
+If a configuration dictionary in config_list does not contain a key specified in filter_dict, it is considered a non-match and is excluded from the result.
+If the list of acceptable values for a key in filter_dict includes None, then configuration dictionaries that do not have that key will also be considered a match.
+config_list_from_json​
+def config_list_from_json(
+    env_or_file: str,
+    file_location: Optional[str] = "",
+    filter_dict: Optional[Dict[str, Union[List[Union[str, None]],
+                                          Set[Union[str, None]]]]] = None
+) -> List[Dict]
+Retrieves a list of API configurations from a JSON stored in an environment variable or a file.
+
+This function attempts to parse JSON data from the given env_or_file parameter. If env_or_file is an environment variable containing JSON data, it will be used directly. Otherwise, it is assumed to be a filename, and the function will attempt to read the file from the specified file_location.
+
+The filter_dict parameter allows for filtering the configurations based on specified criteria. Each key in the filter_dict corresponds to a field in the configuration dictionaries, and the associated value is a list or set of acceptable values for that field. If a field is missing in a configuration and None is included in the list of acceptable values for that field, the configuration will still be considered a match.
+
+Arguments:
+
+env_or_file str - The name of the environment variable, the filename, or the environment variable of the filename that containing the JSON data.
+file_location str, optional - The directory path where the file is located, if env_or_file is a filename.
+filter_dict dict, optional - A dictionary specifying the filtering criteria for the configurations, with keys representing field names and values being lists or sets of acceptable values for those fields.
+Example:
+
+# Suppose we have an environment variable 'CONFIG_JSON' with the following content:
+# '[{"model": "gpt-3.5-turbo", "api_type": "openai"}, {"model": "gpt-4", "api_type": "openai"}]'
+
+# We can retrieve a filtered list of configurations like this:
+filter_criteria = {"api_type": ["openai"], "model": ["gpt-3.5-turbo"]}
+configs = config_list_from_json('CONFIG_JSON', filter_dict=filter_criteria)
+# The 'configs' variable will now contain only the configurations that match the filter criteria.
+Returns:
+
+List[Dict] - A list of configuration dictionaries that match the filtering criteria specified in filter_dict.
+Raises:
+
+FileNotFoundError - if env_or_file is neither found as an environment variable nor a file
+get_config​
+def get_config(api_key: str,
+               base_url: Optional[str] = None,
+               api_type: Optional[str] = None,
+               api_version: Optional[str] = None) -> Dict
+Constructs a configuration dictionary for a single model with the provided API configurations.
+
+Example:
+
+config = get_config(
+    api_key="sk-abcdef1234567890",
+    base_url="https://api.openai.com",
+    api_type="openai",
+    api_version="v1"
+)
+# The 'config' variable will now contain:
+# {
+#     "api_key": "sk-abcdef1234567890",
+#     "base_url": "https://api.openai.com",
+#     "api_type": "openai",
+#     "api_version": "v1"
+# }
+Arguments:
+
+api_key str - The API key for authenticating API requests.
+base_url Optional[str] - The base URL of the API. If not provided, defaults to None.
+api_type Optional[str] - The type of API. If not provided, defaults to None.
+api_version Optional[str] - The version of the API. If not provided, defaults to None.
+Returns:
+
+Dict - A dictionary containing the provided API configurations.
+config_list_from_dotenv​
+def config_list_from_dotenv(
+    dotenv_file_path: Optional[str] = None,
+    model_api_key_map: Optional[dict] = None,
+    filter_dict: Optional[dict] = None
+) -> List[Dict[str, Union[str, Set[str]]]]
+Load API configurations from a specified .env file or environment variables and construct a list of configurations.
+
+This function will:
+
+Load API keys from a provided .env file or from existing environment variables.
+Create a configuration dictionary for each model using the API keys and additional configurations.
+Filter and return the configurations based on provided filters.
+model_api_key_map will default to {"gpt-4": "OPENAI_API_KEY", "gpt-3.5-turbo": "OPENAI_API_KEY"} if none
+
+Arguments:
+
+dotenv_file_path str, optional - The path to the .env file. Defaults to None.
+model_api_key_map str/dict, optional - A dictionary mapping models to their API key configurations. If a string is provided as configuration, it is considered as an environment variable name storing the API key. If a dict is provided, it should contain at least 'api_key_env_var' key, and optionally other API configurations like 'base_url', 'api_type', and 'api_version'. Defaults to a basic map with 'gpt-4' and 'gpt-3.5-turbo' mapped to 'OPENAI_API_KEY'.
+filter_dict dict, optional - A dictionary containing the models to be loaded. Containing a 'model' key mapped to a set of model names to be loaded. Defaults to None, which loads all found configurations.
+Returns:
+
+List[Dict[str, Union[str, Set[str]]]]: A list of configuration dictionaries for each model.
+
+Raises:
+
+FileNotFoundError - If the specified .env file does not exist.
+TypeError - If an unsupported type of configuration is provided in model_api_key_map.
+retrieve_assistants_by_name​
+def retrieve_assistants_by_name(client: OpenAI, name: str) -> List[Assistant]
+Return the assistants with the given name from OAI assistant API
+
+code_utils
+content_str​
+def content_str(content: Union[str, List, None]) -> str
+Converts content into a string format.
+
+This function processes content that may be a string, a list of mixed text and image URLs, or None, and converts it into a string. Text is directly appended to the result string, while image URLs are represented by a placeholder image token. If the content is None, an empty string is returned.
+
+Arguments:
+
+content (Union[str, List, None]): The content to be processed. Can be a string, a list of dictionaries representing text and image URLs, or None.
+Returns:
+
+str - A string representation of the input content. Image URLs are replaced with an image token.
+Notes:
+
+The function expects each dictionary in the list to have a "type" key that is either "text" or "image_url". For "text" type, the "text" key's value is appended to the result. For "image_url", an image token is appended.
+This function is useful for handling content that may include both text and image references, especially in contexts where images need to be represented as placeholders.
+infer_lang​
+def infer_lang(code)
+infer the language for the code. TODO: make it robust.
+
+extract_code​
+def extract_code(
+        text: Union[str, List],
+        pattern: str = CODE_BLOCK_PATTERN,
+        detect_single_line_code: bool = False) -> List[Tuple[str, str]]
+Extract code from a text.
+
+Arguments:
+
+text str or List - The content to extract code from. The content can be a string or a list, as returned by standard GPT or multimodal GPT.
+pattern str, optional - The regular expression pattern for finding the code block. Defaults to CODE_BLOCK_PATTERN.
+detect_single_line_code bool, optional - Enable the new feature for extracting single line code. Defaults to False.
+Returns:
+
+list - A list of tuples, each containing the language and the code. If there is no code block in the input text, the language would be "unknown". If there is code block but the language is not specified, the language would be "".
+generate_code​
+def generate_code(pattern: str = CODE_BLOCK_PATTERN,
+                  **config) -> Tuple[str, float]
+(openai<1) Generate code.
+
+Arguments:
+
+pattern Optional, str - The regular expression pattern for finding the code block. The default pattern is for finding a code block in a markdown file.
+config Optional, dict - The configuration for the API call.
+Returns:
+
+str - The generated code.
+float - The cost of the generation.
+improve_function​
+def improve_function(file_name, func_name, objective, **config)
+(openai<1) Improve the function to achieve the objective.
+
+improve_code​
+def improve_code(files, objective, suggest_only=True, **config)
+(openai<1) Improve the code to achieve a given objective.
+
+Arguments:
+
+files list - A list of file names containing the source code.
+objective str - The objective to achieve.
+suggest_only bool - Whether to return only the suggestions or the improved code.
+config Optional, dict - The configuration for the API call.
+Returns:
+
+str - The improved code if suggest_only=False; a list of suggestions if suggest_only=True (default).
+float - The cost of the generation.
+execute_code​
+def execute_code(code: Optional[str] = None,
+                 timeout: Optional[int] = None,
+                 filename: Optional[str] = None,
+                 work_dir: Optional[str] = None,
+                 use_docker: Optional[Union[List[str], str, bool]] = None,
+                 lang: Optional[str] = "python") -> Tuple[int, str, str]
+Execute code in a docker container. This function is not tested on MacOS.
+
+Arguments:
+
+code Optional, str - The code to execute. If None, the code from the file specified by filename will be executed. Either code or filename must be provided.
+timeout Optional, int - The maximum execution time in seconds. If None, a default timeout will be used. The default timeout is 600 seconds. On Windows, the timeout is not enforced when use_docker=False.
+filename Optional, str - The file name to save the code or where the code is stored when code is None. If None, a file with a randomly generated name will be created. The randomly generated file will be deleted after execution. The file name must be a relative path. Relative paths are relative to the working directory.
+work_dir Optional, str - The working directory for the code execution. If None, a default working directory will be used. The default working directory is the "extensions" directory under "path_to_autogen".
+use_docker Optional, list, str or bool - The docker image to use for code execution. If a list or a str of image name(s) is provided, the code will be executed in a docker container with the first image successfully pulled. If None, False or empty, the code will be executed in the current environment. Default is None, which will be converted into an empty list when docker package is available. Expected behaviour:
+If use_docker is explicitly set to True and the docker package is available, the code will run in a Docker container.
+If use_docker is explicitly set to True but the Docker package is missing, an error will be raised.
+If use_docker is not set (i.e., left default to None) and the Docker package is not available, a warning will be displayed, but the code will run natively. If the code is executed in the current environment, the code must be trusted.
+lang Optional, str - The language of the code. Default is "python".
+Returns:
+
+int - 0 if the code executes successfully.
+str - The error message if the code fails to execute; the stdout otherwise.
+image - The docker image name after container run when docker is used.
+generate_assertions​
+def generate_assertions(definition: str, **config) -> Tuple[str, float]
+(openai<1) Generate assertions for a function.
+
+Arguments:
+
+definition str - The function definition, including the signature and docstr.
+config Optional, dict - The configuration for the API call.
+Returns:
+
+str - The generated assertions.
+float - The cost of the generation.
+eval_function_completions​
+def eval_function_completions(responses: List[str],
+                              definition: str,
+                              test: Optional[str] = None,
+                              entry_point: Optional[str] = None,
+                              assertions: Optional[Union[str, Callable[
+                                  [str], Tuple[str, float]]]] = None,
+                              timeout: Optional[float] = 3,
+                              use_docker: Optional[bool] = True) -> Dict
+(openai<1) Select a response from a list of responses for the function completion task (using generated assertions), and/or evaluate if the task is successful using a gold test.
+
+Arguments:
+
+responses list - The list of responses.
+definition str - The input definition.
+test Optional, str - The test code.
+entry_point Optional, str - The name of the function.
+assertions Optional, str or Callable - The assertion code which serves as a filter of the responses, or an assertion generator. When provided, only the responses that pass the assertions will be considered for the actual test (if provided).
+timeout Optional, float - The timeout for executing the code.
+Returns:
+
+dict - The success metrics.
+PassAssertionFilter Objects​
+class PassAssertionFilter()
+pass_assertions​
+def pass_assertions(context, response, **_)
+(openai<1) Check if the response passes the assertions.
+
+implement​
+def implement(
+    definition: str,
+    configs: Optional[List[Dict]] = None,
+    assertions: Optional[Union[str,
+                               Callable[[str],
+                                        Tuple[str,
+                                              float]]]] = generate_assertions
+) -> Tuple[str, float]
+(openai<1) Implement a function from a definition.
+
+Arguments:
+
+definition str - The function definition, including the signature and docstr.
+configs list - The list of configurations for completion.
+assertions Optional, str or Callable - The assertion code which serves as a filter of the responses, or an assertion generator.
+Returns:
+
+str - The implementation.
+float - The cost of the implementation.
+int - The index of the configuration which generates the implementation.
+
+function_utils
+get_typed_annotation​
+def get_typed_annotation(annotation: Any, globalns: Dict[str, Any]) -> Any
+Get the type annotation of a parameter.
+
+Arguments:
+
+annotation - The annotation of the parameter
+globalns - The global namespace of the function
+Returns:
+
+The type annotation of the parameter
+
+get_typed_signature​
+def get_typed_signature(call: Callable[..., Any]) -> inspect.Signature
+Get the signature of a function with type annotations.
+
+Arguments:
+
+call - The function to get the signature for
+Returns:
+
+The signature of the function with type annotations
+
+get_typed_return_annotation​
+def get_typed_return_annotation(call: Callable[..., Any]) -> Any
+Get the return annotation of a function.
+
+Arguments:
+
+call - The function to get the return annotation for
+Returns:
+
+The return annotation of the function
+
+get_param_annotations​
+def get_param_annotations(
+    typed_signature: inspect.Signature
+) -> Dict[int, Union[Annotated[Type, str], Type]]
+Get the type annotations of the parameters of a function
+
+Arguments:
+
+typed_signature - The signature of the function with type annotations
+Returns:
+
+A dictionary of the type annotations of the parameters of the function
+
+Parameters Objects​
+class Parameters(BaseModel)
+Parameters of a function as defined by the OpenAI API
+
+Function Objects​
+class Function(BaseModel)
+A function as defined by the OpenAI API
+
+ToolFunction Objects​
+class ToolFunction(BaseModel)
+A function under tool as defined by the OpenAI API.
+
+get_parameter_json_schema​
+def get_parameter_json_schema(
+        k: str, v: Union[Annotated[Type, str], Type],
+        default_values: Dict[str, Any]) -> JsonSchemaValue
+Get a JSON schema for a parameter as defined by the OpenAI API
+
+Arguments:
+
+k - The name of the parameter
+v - The type of the parameter
+default_values - The default values of the parameters of the function
+Returns:
+
+A Pydanitc model for the parameter
+
+get_required_params​
+def get_required_params(typed_signature: inspect.Signature) -> List[str]
+Get the required parameters of a function
+
+Arguments:
+
+signature - The signature of the function as returned by inspect.signature
+Returns:
+
+A list of the required parameters of the function
+
+get_default_values​
+def get_default_values(typed_signature: inspect.Signature) -> Dict[str, Any]
+Get default values of parameters of a function
+
+Arguments:
+
+signature - The signature of the function as returned by inspect.signature
+Returns:
+
+A dictionary of the default values of the parameters of the function
+
+get_parameters​
+def get_parameters(required: List[str],
+                   param_annotations: Dict[str, Union[Annotated[Type, str],
+                                                      Type]],
+                   default_values: Dict[str, Any]) -> Parameters
+Get the parameters of a function as defined by the OpenAI API
+
+Arguments:
+
+required - The required parameters of the function
+hints - The type hints of the function as returned by typing.get_type_hints
+Returns:
+
+A Pydantic model for the parameters of the function
+
+get_missing_annotations​
+def get_missing_annotations(typed_signature: inspect.Signature,
+                            required: List[str]) -> Tuple[Set[str], Set[str]]
+Get the missing annotations of a function
+
+Ignores the parameters with default values as they are not required to be annotated, but logs a warning.
+
+Arguments:
+
+typed_signature - The signature of the function with type annotations
+required - The required parameters of the function
+Returns:
+
+A set of the missing annotations of the function
+
+get_function_schema​
+def get_function_schema(f: Callable[..., Any],
+                        *,
+                        name: Optional[str] = None,
+                        description: str) -> Dict[str, Any]
+Get a JSON schema for a function as defined by the OpenAI API
+
+Arguments:
+
+f - The function to get the JSON schema for
+name - The name of the function
+description - The description of the function
+Returns:
+
+A JSON schema for the function
+
+Raises:
+
+TypeError - If the function is not annotated
+Examples:
+
+```
+def f(a: Annotated[str, "Parameter a"], b: int = 2, c: Annotated[float, "Parameter c"] = 0.1) -> None:
+    pass
+
+get_function_schema(f, description="function f")
+
+#   {'type': 'function',
+#    'function': {'description': 'function f',
+#        'name': 'f',
+#        'parameters': {'type': 'object',
+#           'properties': {'a': {'type': 'str', 'description': 'Parameter a'},
+#               'b': {'type': 'int', 'description': 'b'},
+#               'c': {'type': 'float', 'description': 'Parameter c'}},
+#           'required': ['a']}}}
+    ```
+get_load_param_if_needed_function​
+def get_load_param_if_needed_function(
+        t: Any) -> Optional[Callable[[T, Type], BaseModel]]
+Get a function to load a parameter if it is a Pydantic model
+
+Arguments:
+
+t - The type annotation of the parameter
+Returns:
+
+A function to load the parameter if it is a Pydantic model, otherwise None
+
+load_basemodels_if_needed​
+def load_basemodels_if_needed(func: Callable[..., Any]) -> Callable[..., Any]
+A decorator to load the parameters of a function if they are Pydantic models
+
+Arguments:
+
+func - The function with annotated parameters
+Returns:
+
+A function that loads the parameters before calling the original function
+
+Edit this page
+
+
+math_utils
+solve_problem​
+def solve_problem(problem: str, **config) -> str
+(openai<1) Solve the math problem.
+
+Arguments:
+
+problem str - The problem statement.
+config Optional, dict - The configuration for the API call.
+Returns:
+
+str - The solution to the problem.
+remove_boxed​
+def remove_boxed(string: str) -> Optional[str]
+Source: https://github.com/hendrycks/math Extract the text within a \boxed{...} environment.
+
+Example:
+
+remove_boxed("\boxed{\frac{2}{3}}")
+
+\frac{2}{3}
+
+last_boxed_only_string​
+def last_boxed_only_string(string: str) -> Optional[str]
+Source: https://github.com/hendrycks/math Extract the last \boxed{...} or \fbox{...} element from a string.
+
+is_equiv​
+def is_equiv(str1: Optional[str], str2: Optional[str]) -> float
+Returns (as a float) whether two strings containing math are equivalent up to differences of formatting in
+
+units
+fractions
+square roots
+superfluous LaTeX. Source: https://github.com/hendrycks/math
+is_equiv_chain_of_thought​
+def is_equiv_chain_of_thought(str1: str, str2: str) -> float
+Strips the solution first before calling is_equiv.
+
+eval_math_responses​
+def eval_math_responses(responses, solution=None, **args)
+Select a response for a math problem using voting, and check if the response is correct if the solution is provided.
+
+Arguments:
+
+responses list - The list of responses.
+solution str - The canonical solution.
+Returns:
+
+dict - The success metrics.
+
+
+retrieve_utils
+UNSTRUCTURED_FORMATS​
+These formats will be parsed by the 'unstructured' library, if installed.
+
+split_text_to_chunks​
+def split_text_to_chunks(text: str,
+                         max_tokens: int = 4000,
+                         chunk_mode: str = "multi_lines",
+                         must_break_at_empty_line: bool = True,
+                         overlap: int = 10)
+Split a long text into chunks of max_tokens.
+
+extract_text_from_pdf​
+def extract_text_from_pdf(file: str) -> str
+Extract text from PDF files
+
+split_files_to_chunks​
+def split_files_to_chunks(files: list,
+                          max_tokens: int = 4000,
+                          chunk_mode: str = "multi_lines",
+                          must_break_at_empty_line: bool = True,
+                          custom_text_split_function: Callable = None)
+Split a list of files into chunks of max_tokens.
+
+get_files_from_dir​
+def get_files_from_dir(dir_path: Union[str, List[str]],
+                       types: list = TEXT_FORMATS,
+                       recursive: bool = True)
+Return a list of all the files in a given directory, a url, a file path or a list of them.
+
+get_file_from_url​
+def get_file_from_url(url: str, save_path: str = None)
+Download a file from a URL.
+
+is_url​
+def is_url(string: str)
+Return True if the string is a valid URL.
+
+create_vector_db_from_dir​
+def create_vector_db_from_dir(dir_path: Union[str, List[str]],
+                              max_tokens: int = 4000,
+                              client: API = None,
+                              db_path: str = "/tmp/chromadb.db",
+                              collection_name: str = "all-my-documents",
+                              get_or_create: bool = False,
+                              chunk_mode: str = "multi_lines",
+                              must_break_at_empty_line: bool = True,
+                              embedding_model: str = "all-MiniLM-L6-v2",
+                              embedding_function: Callable = None,
+                              custom_text_split_function: Callable = None,
+                              custom_text_types: List[str] = TEXT_FORMATS,
+                              recursive: bool = True,
+                              extra_docs: bool = False) -> API
+Create a vector db from all the files in a given directory, the directory can also be a single file or a url to a single file. We support chromadb compatible APIs to create the vector db, this function is not required if you prepared your own vector db.
+
+Arguments:
+
+dir_path Union[str, List[str]] - the path to the directory, file, url or a list of them.
+max_tokens Optional, int - the maximum number of tokens per chunk. Default is 4000.
+client Optional, API - the chromadb client. Default is None.
+db_path Optional, str - the path to the chromadb. Default is "/tmp/chromadb.db".
+collection_name Optional, str - the name of the collection. Default is "all-my-documents".
+get_or_create Optional, bool - Whether to get or create the collection. Default is False. If True, the collection will be returned if it already exists. Will raise ValueError if the collection already exists and get_or_create is False.
+chunk_mode Optional, str - the chunk mode. Default is "multi_lines".
+must_break_at_empty_line Optional, bool - Whether to break at empty line. Default is True.
+embedding_model Optional, str - the embedding model to use. Default is "all-MiniLM-L6-v2". Will be ignored if embedding_function is not None.
+embedding_function Optional, Callable - the embedding function to use. Default is None, SentenceTransformer with the given embedding_model will be used. If you want to use OpenAI, Cohere, HuggingFace or other embedding functions, you can pass it here, follow the examples in https://docs.trychroma.com/embeddings.
+custom_text_split_function Optional, Callable - a custom function to split a string into a list of strings. Default is None, will use the default function in autogen.retrieve_utils.split_text_to_chunks.
+custom_text_types Optional, List[str] - a list of file types to be processed. Default is TEXT_FORMATS.
+recursive Optional, bool - whether to search documents recursively in the dir_path. Default is True.
+extra_docs Optional, bool - whether to add more documents in the collection. Default is False
+Returns:
+
+API - the chromadb client.
+query_vector_db​
+def query_vector_db(query_texts: List[str],
+                    n_results: int = 10,
+                    client: API = None,
+                    db_path: str = "/tmp/chromadb.db",
+                    collection_name: str = "all-my-documents",
+                    search_string: str = "",
+                    embedding_model: str = "all-MiniLM-L6-v2",
+                    embedding_function: Callable = None) -> QueryResult
+Query a vector db. We support chromadb compatible APIs, it's not required if you prepared your own vector db and query function.
+
+Arguments:
+
+query_texts List[str] - the list of strings which will be used to query the vector db.
+n_results Optional, int - the number of results to return. Default is 10.
+client Optional, API - the chromadb compatible client. Default is None, a chromadb client will be used.
+db_path Optional, str - the path to the vector db. Default is "/tmp/chromadb.db".
+collection_name Optional, str - the name of the collection. Default is "all-my-documents".
+search_string Optional, str - the search string. Only docs that contain an exact match of this string will be retrieved. Default is "".
+embedding_model Optional, str - the embedding model to use. Default is "all-MiniLM-L6-v2". Will be ignored if embedding_function is not None.
+embedding_function Optional, Callable - the embedding function to use. Default is None, SentenceTransformer with the given embedding_model will be used. If you want to use OpenAI, Cohere, HuggingFace or other embedding functions, you can pass it here, follow the examples in https://docs.trychroma.com/embeddings.
+Returns:
+
+QueryResult - the query result. The format is: class QueryResult(TypedDict):
+ids - List[IDs]
+embeddings - Optional[List[List[Embedding]]]
+documents - Optional[List[List[Document]]]
+metadatas - Optional[List[List[Metadata]]]
+distances - Optional[List[List[float]]]
+
+token_count_utils
+token_left​
+def token_left(input: Union[str, List, Dict],
+               model="gpt-3.5-turbo-0613") -> int
+Count number of tokens left for an OpenAI model.
+
+Arguments:
+
+input - (str, list, dict): Input to the model.
+model - (str): Model name.
+Returns:
+
+int - Number of tokens left that the model can use for completion.
+count_token​
+def count_token(input: Union[str, List, Dict],
+                model: str = "gpt-3.5-turbo-0613") -> int
+Count number of tokens used by an OpenAI model.
+
+Arguments:
+
+input - (str, list, dict): Input to the model.
+model - (str): Model name.
+Returns:
+
+int - Number of tokens from the input.
+num_tokens_from_functions​
+def num_tokens_from_functions(functions, model="gpt-3.5-turbo-0613") -> int
+Return the number of tokens used by a list of functions.
+
+Arguments:
+
+functions - (list): List of function descriptions that will be passed in model.
+model - (str): Model name.
+Returns:
+
+int - Number of tokens from the function descriptions.
+
+
+Getting Started
+AutoGen is a framework that enables development of LLM applications using multiple agents that can converse with each other to solve tasks. AutoGen agents are customizable, conversable, and seamlessly allow human participation. They can operate in various modes that employ combinations of LLMs, human inputs, and tools.
+
+AutoGen Overview
+
+Main Features​
+AutoGen enables building next-gen LLM applications based on multi-agent conversations with minimal effort. It simplifies the orchestration, automation, and optimization of a complex LLM workflow. It maximizes the performance of LLM models and overcomes their weaknesses.
+It supports diverse conversation patterns for complex workflows. With customizable and conversable agents, developers can use AutoGen to build a wide range of conversation patterns concerning conversation autonomy, the number of agents, and agent conversation topology.
+It provides a collection of working systems with different complexities. These systems span a wide range of applications from various domains and complexities. This demonstrates how AutoGen can easily support diverse conversation patterns.
+AutoGen provides enhanced LLM inference. It offers utilities like API unification and caching, and advanced usage patterns, such as error handling, multi-config inference, context programming, etc.
+AutoGen is powered by collaborative research studies from Microsoft, Penn State University, and University of Washington.
+
+Quickstart​
+Install from pip: pip install pyautogen. Find more options in Installation. For code execution, we strongly recommend installing the python docker package, and using docker.
+
+Multi-Agent Conversation Framework​
+Autogen enables the next-gen LLM applications with a generic multi-agent conversation framework. It offers customizable and conversable agents which integrate LLMs, tools, and humans. By automating chat among multiple capable agents, one can easily make them collectively perform tasks autonomously or with human feedback, including tasks that require using tools via code. For example,
+
+from autogen import AssistantAgent, UserProxyAgent, config_list_from_json
+
+# Load LLM inference endpoints from an env variable or a file
+# See https://microsoft.github.io/autogen/docs/FAQ#set-your-api-endpoints
+# and OAI_CONFIG_LIST_sample.json
+config_list = config_list_from_json(env_or_file="OAI_CONFIG_LIST")
+assistant = AssistantAgent("assistant", llm_config={"config_list": config_list})
+user_proxy = UserProxyAgent("user_proxy", code_execution_config={"work_dir": "coding"})
+user_proxy.initiate_chat(assistant, message="Plot a chart of NVDA and TESLA stock price change YTD.")
+# This initiates an automated chat between the two agents to solve the task
+The figure below shows an example conversation flow with AutoGen. Agent Chat Example
+
+Code examples.
+Documentation.
+Enhanced LLM Inferences​
+Autogen also helps maximize the utility out of the expensive LLMs such as ChatGPT and GPT-4. It offers enhanced LLM inference with powerful functionalities like tuning, caching, error handling, templating. For example, you can optimize generations by LLM with your own tuning data, success metrics and budgets.
+
+# perform tuning for openai<1
+config, analysis = autogen.Completion.tune(
+    data=tune_data,
+    metric="success",
+    mode="max",
+    eval_func=eval_func,
+    inference_budget=0.05,
+    optimization_budget=3,
+    num_samples=-1,
+)
+# perform inference for a test instance
+response = autogen.Completion.create(context=test_instance, **config)
+Code examples.
+Documentation.
+Where to Go Next ?​
+Understand the use cases for multi-agent conversation and enhanced LLM inference.
+Find code examples.
+Read SDK.
+Learn about research around AutoGen.
+Roadmap
+Chat on Discord.
+Follow on Twitter.
+If you like our project, please give it a star on GitHub. If you are interested in contributing, please read Contributor's Guide.
+
+Installation
+Option 1: Install and Run AutoGen in Docker​
+Docker is a containerization platform that simplifies the setup and execution of your code. A properly built docker image could provide isolated and consistent environment to run your code securely across platforms. One option of using AutoGen is to install and run it in a docker container. You can do that in Github codespace or follow the instructions below to do so.
+
+Step 1. Install Docker.​
+Install docker following this instruction.
+
+For Mac users, alternatively you may choose to install colima to run docker containers, if there is any issues with starting the docker daemon.
+
+Step 2. Build a docker image​
+AutoGen provides dockerfiles that could be used to build docker images. Use the following command line to build a docker image named autogen_img (or other names you prefer) from one of the provided dockerfiles named Dockerfile.base:
+
+docker build -f samples/dockers/Dockerfile.base -t autogen_img https://github.com/microsoft/autogen.git#main
+which includes some common python libraries and essential dependencies of AutoGen, or build from Dockerfile.full which include additional dependencies for more advanced features of AutoGen with the following command line:
+
+docker build -f samples/dockers/Dockerfile.full -t autogen_full_img https://github.com/microsoft/autogen.git
+Once you build the docker image, you can use docker images to check whether it has been created successfully.
+
+Step 3. Run applications built with AutoGen from a docker image.​
+Mount your code to the docker image and run your application from there: Now suppose you have your application built with AutoGen in a main script named twoagent.py (example) in a folder named myapp. With the command line below, you can mont your folder and run the application in docker.
+
+# Mount the local folder `myapp` into docker image and run the script named "twoagent.py" in the docker.
+docker run -it -v `pwd`/myapp:/myapp autogen_img:latest python /myapp/main_twoagent.py
+Option 2: Install AutoGen Locally Using Virtual Environment​
+When installing AutoGen locally, we recommend using a virtual environment for the installation. This will ensure that the dependencies for AutoGen are isolated from the rest of your system.
+
+Option a: venv​
+You can create a virtual environment with venv as below:
+
+python3 -m venv pyautogen
+source pyautogen/bin/activate
+The following command will deactivate the current venv environment:
+
+deactivate
+Option b: conda​
+Another option is with Conda. You can install it by following this doc, and then create a virtual environment as below:
+
+conda create -n pyautogen python=3.10  # python 3.10 is recommended as it's stable and not too old
+conda activate pyautogen
+The following command will deactivate the current conda environment:
+
+conda deactivate
+Option c: poetry​
+Another option is with poetry, which is a dependency manager for Python.
+
+Poetry is a tool for dependency management and packaging in Python. It allows you to declare the libraries your project depends on and it will manage (install/update) them for you. Poetry offers a lockfile to ensure repeatable installs, and can build your project for distribution.
+
+You can install it by following this doc, and then create a virtual environment as below:
+
+poetry init
+poetry shell
+
+poetry add pyautogen
+The following command will deactivate the current poetry environment:
+
+exit
+Now, you're ready to install AutoGen in the virtual environment you've just created.
+
+Python​
+AutoGen requires Python version >= 3.8, < 3.12. It can be installed from pip:
+
+pip install pyautogen
+pyautogen<0.2 requires openai<1. Starting from pyautogen v0.2, openai>=1 is required.
+
+Migration guide to v0.2​
+openai v1 is a total rewrite of the library with many breaking changes. For example, the inference requires instantiating a client, instead of using a global class method. Therefore, some changes are required for users of pyautogen<0.2.
+
+api_base -> base_url, request_timeout -> timeout in llm_config and config_list. max_retry_period and retry_wait_time are deprecated. max_retries can be set for each client.
+MathChat is unsupported until it is tested in future release.
+autogen.Completion and autogen.ChatCompletion are deprecated. The essential functionalities are moved to autogen.OpenAIWrapper:
+from autogen import OpenAIWrapper
+client = OpenAIWrapper(config_list=config_list)
+response = client.create(messages=[{"role": "user", "content": "2+2="}])
+print(client.extract_text_or_completion_object(response))
+Inference parameter tuning and inference logging features are currently unavailable in OpenAIWrapper. Logging will be added in a future release. Inference parameter tuning can be done via flaml.tune.
+seed in autogen is renamed into cache_seed to accommodate the newly added seed param in openai chat completion api. use_cache is removed as a kwarg in OpenAIWrapper.create() for being automatically decided by cache_seed: int | None. The difference between autogen's cache_seed and openai's seed is that:
+autogen uses local disk cache to guarantee the exactly same output is produced for the same input and when cache is hit, no openai api call will be made.
+openai's seed is a best-effort deterministic sampling with no guarantee of determinism. When using openai's seed with cache_seed set to None, even for the same input, an openai api call will be made and there is no guarantee for getting exactly the same output.
+Optional Dependencies​
+docker​
+Even if you install AutoGen locally, we highly recommend using Docker for code execution.
+
+To use docker for code execution, you also need to install the python package docker:
+
+pip install docker
+You might want to override the default docker image used for code execution. To do that set use_docker key of code_execution_config property to the name of the image. E.g.:
+
+user_proxy = autogen.UserProxyAgent(
+    name="agent",
+    human_input_mode="TERMINATE",
+    max_consecutive_auto_reply=10,
+    code_execution_config={"work_dir":"_output", "use_docker":"python:3"},
+    llm_config=llm_config,
+    system_message=""""Reply TERMINATE if the task has been solved at full satisfaction.
+Otherwise, reply CONTINUE, or the reason why the task is not solved yet."""
+)
+blendsearch​
+pyautogen<0.2 offers a cost-effective hyperparameter optimization technique EcoOptiGen for tuning Large Language Models. Please install with the [blendsearch] option to use it.
+
+pip install "pyautogen[blendsearch]<0.2"
+Example notebooks:
+
+Optimize for Code Generation
+
+Optimize for Math
+
+retrievechat​
+pyautogen supports retrieval-augmented generation tasks such as question answering and code generation with RAG agents. Please install with the [retrievechat] option to use it.
+
+pip install "pyautogen[retrievechat]"
+RetrieveChat can handle various types of documents. By default, it can process plain text and PDF files, including formats such as 'txt', 'json', 'csv', 'tsv', 'md', 'html', 'htm', 'rtf', 'rst', 'jsonl', 'log', 'xml', 'yaml', 'yml' and 'pdf'. If you install unstructured (pip install "unstructured[all-docs]"), additional document types such as 'docx', 'doc', 'odt', 'pptx', 'ppt', 'xlsx', 'eml', 'msg', 'epub' will also be supported.
+
+You can find a list of all supported document types by using autogen.retrieve_utils.TEXT_FORMATS.
+
+Example notebooks:
+
+Automated Code Generation and Question Answering with Retrieval Augmented Agents
+
+Group Chat with Retrieval Augmented Generation (with 5 group member agents and 1 manager agent)
+
+Automated Code Generation and Question Answering with Qdrant based Retrieval Augmented Agents
+
+Teachability​
+To use Teachability, please install AutoGen with the [teachable] option.
+
+pip install "pyautogen[teachable]"
+Example notebook: Chatting with a teachable agent
+
+Large Multimodal Model (LMM) Agents​
+We offered Multimodal Conversable Agent and LLaVA Agent. Please install with the [lmm] option to use it.
+
+pip install "pyautogen[lmm]"
+Example notebooks:
+
+LLaVA Agent
+
+mathchat​
+pyautogen<0.2 offers an experimental agent for math problem solving. Please install with the [mathchat] option to use it.
+
+pip install "pyautogen[mathchat]<0.2"
+Example notebooks:
+
+Using MathChat to Solve Math Problems
+
+Multi-agent Conversation Framework
+AutoGen offers a unified multi-agent conversation framework as a high-level abstraction of using foundation models. It features capable, customizable and conversable agents which integrate LLMs, tools, and humans via automated agent chat. By automating chat among multiple capable agents, one can easily make them collectively perform tasks autonomously or with human feedback, including tasks that require using tools via code.
+
+This framework simplifies the orchestration, automation and optimization of a complex LLM workflow. It maximizes the performance of LLM models and overcome their weaknesses. It enables building next-gen LLM applications based on multi-agent conversations with minimal effort.
+
+Agents​
+AutoGen abstracts and implements conversable agents designed to solve tasks through inter-agent conversations. Specifically, the agents in AutoGen have the following notable features:
+
+Conversable: Agents in AutoGen are conversable, which means that any agent can send and receive messages from other agents to initiate or continue a conversation
+
+Customizable: Agents in AutoGen can be customized to integrate LLMs, humans, tools, or a combination of them.
+
+The figure below shows the built-in agents in AutoGen. Agent Chat Example
+
+We have designed a generic ConversableAgent class for Agents that are capable of conversing with each other through the exchange of messages to jointly finish a task. An agent can communicate with other agents and perform actions. Different agents can differ in what actions they perform after receiving messages. Two representative subclasses are AssistantAgent and UserProxyAgent
+
+The AssistantAgent is designed to act as an AI assistant, using LLMs by default but not requiring human input or code execution. It could write Python code (in a Python coding block) for a user to execute when a message (typically a description of a task that needs to be solved) is received. Under the hood, the Python code is written by LLM (e.g., GPT-4). It can also receive the execution results and suggest corrections or bug fixes. Its behavior can be altered by passing a new system message. The LLM inference configuration can be configured via [llm_config].
+
+The UserProxyAgent is conceptually a proxy agent for humans, soliciting human input as the agent's reply at each interaction turn by default and also having the capability to execute code and call functions or tools. The UserProxyAgent triggers code execution automatically when it detects an executable code block in the received message and no human user input is provided. Code execution can be disabled by setting the code_execution_config parameter to False. LLM-based response is disabled by default. It can be enabled by setting llm_config to a dict corresponding to the inference configuration. When llm_config is set as a dictionary, UserProxyAgent can generate replies using an LLM when code execution is not performed.
+
+The auto-reply capability of ConversableAgent allows for more autonomous multi-agent communication while retaining the possibility of human intervention. One can also easily extend it by registering reply functions with the register_reply() method.
+
+In the following code, we create an AssistantAgent named "assistant" to serve as the assistant and a UserProxyAgent named "user_proxy" to serve as a proxy for the human user. We will later employ these two agents to solve a task.
+
+from autogen import AssistantAgent, UserProxyAgent
+
+# create an AssistantAgent instance named "assistant"
+assistant = AssistantAgent(name="assistant")
+
+# create a UserProxyAgent instance named "user_proxy"
+user_proxy = UserProxyAgent(name="user_proxy")
+Tool calling​
+Tool calling enables agents to interact with external tools and APIs more efficiently. This feature allows the AI model to intelligently choose to output a JSON object containing arguments to call specific tools based on the user's input. A tool to be called is specified with a JSON schema describing its parameters and their types. Writing such JSON schema is complex and error-prone and that is why AutoGen framework provides two high level function decorators for automatically generating such schema using type hints on standard Python datatypes or Pydantic models:
+
+ConversableAgent.register_for_llm is used to register the function as a Tool in the llm_config of a ConversableAgent. The ConversableAgent agent can propose execution of a registered Tool, but the actual execution will be performed by a UserProxy agent.
+
+ConversableAgent.register_for_execution is used to register the function in the function_map of a UserProxy agent.
+
+The following examples illustrates the process of registering a custom function for currency exchange calculation that uses type hints and standard Python datatypes:
+
+from typing import Literal
+from typing_extensions import Annotated
+from somewhere import exchange_rate
+# the agents are instances of AssistantAgent and UserProxyAgent
+from myagents import chatbot, user_proxy
+
+CurrencySymbol = Literal["USD", "EUR"]
+
+# registers the function for execution (updates function map)
+@user_proxy.register_for_execution()
+# creates JSON schema from type hints and registers the function to llm_config
+@chatbot.register_for_llm(description="Currency exchange calculator.")
+# python function with type hints
+def currency_calculator(
+  # Annotated type is used for attaching description to the parameter
+  base_amount: Annotated[float, "Amount of currency in base_currency"],
+  # default values of parameters will be propagated to the LLM
+  base_currency: Annotated[CurrencySymbol, "Base currency"] = "USD",
+  quote_currency: Annotated[CurrencySymbol, "Quote currency"] = "EUR",
+) -> str: # return type must be either str, BaseModel or serializable by json.dumps()
+  quote_amount = exchange_rate(base_currency, quote_currency) * base_amount
+  return f"{quote_amount} {quote_currency}"
+Notice the use of Annotated to specify the type and the description of each parameter. The return value of the function must be either string or serializable to string using the json.dumps() or Pydantic model dump to JSON (both version 1.x and 2.x are supported).
+
+You can check the JSON schema generated by the decorator chatbot.llm_config["tools"]:
+
+[{'type': 'function', 'function':
+ {'description': 'Currency exchange calculator.',
+  'name': 'currency_calculator',
+  'parameters': {'type': 'object',
+   'properties': {'base_amount': {'type': 'number',
+     'description': 'Amount of currency in base_currency'},
+    'base_currency': {'enum': ['USD', 'EUR'],
+     'type': 'string',
+     'default': 'USD',
+     'description': 'Base currency'},
+    'quote_currency': {'enum': ['USD', 'EUR'],
+     'type': 'string',
+     'default': 'EUR',
+     'description': 'Quote currency'}},
+   'required': ['base_amount']}}}]
+Agents can now use the function as follows:
+
+user_proxy (to chatbot):
+
+How much is 123.45 USD in EUR?
+
+--------------------------------------------------------------------------------
+chatbot (to user_proxy):
+
+***** Suggested tool Call: currency_calculator *****
+Arguments:
+{"base_amount":123.45,"base_currency":"USD","quote_currency":"EUR"}
+********************************************************
+
+--------------------------------------------------------------------------------
+
+>>>>>>>> EXECUTING FUNCTION currency_calculator...
+user_proxy (to chatbot):
+
+***** Response from calling function "currency_calculator" *****
+112.22727272727272 EUR
+****************************************************************
+
+--------------------------------------------------------------------------------
+chatbot (to user_proxy):
+
+123.45 USD is equivalent to approximately 112.23 EUR.
+...
+
+TERMINATE
+Use of Pydantic models further simplifies writing of such functions. Pydantic models can be used for both the parameters of a function and for its return type. Parameters of such functions will be constructed from JSON provided by an AI model, while the output will be serialized as JSON encoded string automatically.
+
+The following example shows how we could rewrite our currency exchange calculator example:
+
+from typing import Literal
+from typing_extensions import Annotated
+from pydantic import BaseModel, Field
+from somewhere import exchange_rate
+from myagents import chatbot, user_proxy
+
+# defines a Pydantic model
+class Currency(BaseModel):
+  # parameter of type CurrencySymbol
+  currency: Annotated[CurrencySymbol, Field(..., description="Currency symbol")]
+  # parameter of type float, must be greater or equal to 0 with default value 0
+  amount: Annotated[float, Field(0, description="Amount of currency", ge=0)]
+
+@user_proxy.register_for_execution()
+@chatbot.register_for_llm(description="Currency exchange calculator.")
+def currency_calculator(
+  base: Annotated[Currency, "Base currency: amount and currency symbol"],
+  quote_currency: Annotated[CurrencySymbol, "Quote currency symbol"] = "USD",
+) -> Currency:
+  quote_amount = exchange_rate(base.currency, quote_currency) * base.amount
+  return Currency(amount=quote_amount, currency=quote_currency)
+The generated JSON schema has additional properties such as minimum value encoded:
+
+[{'type': 'function', 'function':
+ {'description': 'Currency exchange calculator.',
+  'name': 'currency_calculator',
+  'parameters': {'type': 'object',
+   'properties': {'base': {'properties': {'currency': {'description': 'Currency symbol',
+       'enum': ['USD', 'EUR'],
+       'title': 'Currency',
+       'type': 'string'},
+      'amount': {'default': 0,
+       'description': 'Amount of currency',
+       'minimum': 0.0,
+       'title': 'Amount',
+       'type': 'number'}},
+     'required': ['currency'],
+     'title': 'Currency',
+     'type': 'object',
+     'description': 'Base currency: amount and currency symbol'},
+    'quote_currency': {'enum': ['USD', 'EUR'],
+     'type': 'string',
+     'default': 'USD',
+     'description': 'Quote currency symbol'}},
+   'required': ['base']}}}]
+For more in-depth examples, please check the following:
+
+Currency calculator examples - View Notebook
+
+Use Provided Tools as Functions - View Notebook
+
+Use Tools via Sync and Async Function Calling - View Notebook
+
+Multi-agent Conversations​
+A Basic Two-Agent Conversation Example​
+Once the participating agents are constructed properly, one can start a multi-agent conversation session by an initialization step as shown in the following code:
+
+# the assistant receives a message from the user, which contains the task description
+user_proxy.initiate_chat(
+    assistant,
+    message="""What date is today? Which big tech stock has the largest year-to-date gain this year? How much is the gain?""",
+)
+After the initialization step, the conversation could proceed automatically. Find a visual illustration of how the user_proxy and assistant collaboratively solve the above task autonomously below: Agent Chat Example
+
+The assistant receives a message from the user_proxy, which contains the task description.
+The assistant then tries to write Python code to solve the task and sends the response to the user_proxy.
+Once the user_proxy receives a response from the assistant, it tries to reply by either soliciting human input or preparing an automatically generated reply. If no human input is provided, the user_proxy executes the code and uses the result as the auto-reply.
+The assistant then generates a further response for the user_proxy. The user_proxy can then decide whether to terminate the conversation. If not, steps 3 and 4 are repeated.
+Supporting Diverse Conversation Patterns​
+Conversations with different levels of autonomy, and human-involvement patterns​
+On the one hand, one can achieve fully autonomous conversations after an initialization step. On the other hand, AutoGen can be used to implement human-in-the-loop problem-solving by configuring human involvement levels and patterns (e.g., setting the human_input_mode to ALWAYS), as human involvement is expected and/or desired in many applications.
+
+Static and dynamic conversations​
+By adopting the conversation-driven control with both programming language and natural language, AutoGen inherently allows dynamic conversation. Dynamic conversation allows the agent topology to change depending on the actual flow of conversation under different input problem instances, while the flow of a static conversation always follows a pre-defined topology. The dynamic conversation pattern is useful in complex applications where the patterns of interaction cannot be predetermined in advance. AutoGen provides two general approaches to achieving dynamic conversation:
+
+Registered auto-reply. With the pluggable auto-reply function, one can choose to invoke conversations with other agents depending on the content of the current message and context. A working system demonstrating this type of dynamic conversation can be found in this code example, demonstrating a dynamic group chat. In the system, we register an auto-reply function in the group chat manager, which lets LLM decide who the next speaker will be in a group chat setting.
+
+LLM-based function call. In this approach, LLM decides whether or not to call a particular function depending on the conversation status in each inference call. By messaging additional agents in the called functions, the LLM can drive dynamic multi-agent conversation. A working system showcasing this type of dynamic conversation can be found in the multi-user math problem solving scenario, where a student assistant would automatically resort to an expert using function calls.
+
+Diverse Applications Implemented with AutoGen​
+The figure below shows six examples of applications built using AutoGen. Applications
+
+Find a list of examples in this page: Automated Agent Chat Examples
+
+For Further Reading​
+Interested in the research that leads to this package? Please check the following papers.
+
+AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation Framework. Qingyun Wu, Gagan Bansal, Jieyu Zhang, Yiran Wu, Shaokun Zhang, Erkang Zhu, Beibin Li, Li Jiang, Xiaoyun Zhang and Chi Wang. ArXiv 2023.
+
+An Empirical Study on Challenging Math Problem Solving with GPT-4. Yiran Wu, Feiran Jia, Shaokun Zhang, Hangyu Li, Erkang Zhu, Yue Wang, Yin Tat Lee, Richard Peng, Qingyun Wu, Chi Wang. ArXiv preprint arXiv:2306.01337 (2023).
+
+Enhanced Inference
+autogen.OpenAIWrapper provides enhanced LLM inference for openai>=1. autogen.Completion is a drop-in replacement of openai.Completion and openai.ChatCompletion for enhanced LLM inference using openai<1. There are a number of benefits of using autogen to perform inference: performance tuning, API unification, caching, error handling, multi-config inference, result filtering, templating and so on.
+
+Tune Inference Parameters (for openai<1)​
+Find a list of examples in this page: Tune Inference Parameters Examples
+
+Choices to optimize​
+The cost of using foundation models for text generation is typically measured in terms of the number of tokens in the input and output combined. From the perspective of an application builder using foundation models, the use case is to maximize the utility of the generated text under an inference budget constraint (e.g., measured by the average dollar cost needed to solve a coding problem). This can be achieved by optimizing the hyperparameters of the inference, which can significantly affect both the utility and the cost of the generated text.
+
+The tunable hyperparameters include:
+
+model - this is a required input, specifying the model ID to use.
+prompt/messages - the input prompt/messages to the model, which provides the context for the text generation task.
+max_tokens - the maximum number of tokens (words or word pieces) to generate in the output.
+temperature - a value between 0 and 1 that controls the randomness of the generated text. A higher temperature will result in more random and diverse text, while a lower temperature will result in more predictable text.
+top_p - a value between 0 and 1 that controls the sampling probability mass for each token generation. A lower top_p value will make it more likely to generate text based on the most likely tokens, while a higher value will allow the model to explore a wider range of possible tokens.
+n - the number of responses to generate for a given prompt. Generating multiple responses can provide more diverse and potentially more useful output, but it also increases the cost of the request.
+stop - a list of strings that, when encountered in the generated text, will cause the generation to stop. This can be used to control the length or the validity of the output.
+presence_penalty, frequency_penalty - values that control the relative importance of the presence and frequency of certain words or phrases in the generated text.
+best_of - the number of responses to generate server-side when selecting the "best" (the one with the highest log probability per token) response for a given prompt.
+The cost and utility of text generation are intertwined with the joint effect of these hyperparameters. There are also complex interactions among subsets of the hyperparameters. For example, the temperature and top_p are not recommended to be altered from their default values together because they both control the randomness of the generated text, and changing both at the same time can result in conflicting effects; n and best_of are rarely tuned together because if the application can process multiple outputs, filtering on the server side causes unnecessary information loss; both n and max_tokens will affect the total number of tokens generated, which in turn will affect the cost of the request. These interactions and trade-offs make it difficult to manually determine the optimal hyperparameter settings for a given text generation task.
+
+Do the choices matter? Check this blogpost to find example tuning results about gpt-3.5-turbo and gpt-4.
+
+With AutoGen, the tuning can be performed with the following information:
+
+Validation data.
+Evaluation function.
+Metric to optimize.
+Search space.
+Budgets: inference and optimization respectively.
+Validation data​
+Collect a diverse set of instances. They can be stored in an iterable of dicts. For example, each instance dict can contain "problem" as a key and the description str of a math problem as the value; and "solution" as a key and the solution str as the value.
+
+Evaluation function​
+The evaluation function should take a list of responses, and other keyword arguments corresponding to the keys in each validation data instance as input, and output a dict of metrics. For example,
+
+def eval_math_responses(responses: List[str], solution: str, **args) -> Dict:
+    # select a response from the list of responses
+    answer = voted_answer(responses)
+    # check whether the answer is correct
+    return {"success": is_equivalent(answer, solution)}
+autogen.code_utils and autogen.math_utils offer some example evaluation functions for code generation and math problem solving.
+
+Metric to optimize​
+The metric to optimize is usually an aggregated metric over all the tuning data instances. For example, users can specify "success" as the metric and "max" as the optimization mode. By default, the aggregation function is taking the average. Users can provide a customized aggregation function if needed.
+
+Search space​
+Users can specify the (optional) search range for each hyperparameter.
+
+model. Either a constant str, or multiple choices specified by flaml.tune.choice.
+prompt/messages. Prompt is either a str or a list of strs, of the prompt templates. messages is a list of dicts or a list of lists, of the message templates. Each prompt/message template will be formatted with each data instance. For example, the prompt template can be: "{problem} Solve the problem carefully. Simplify your answer as much as possible. Put the final answer in \boxed{{}}." And {problem} will be replaced by the "problem" field of each data instance.
+max_tokens, n, best_of. They can be constants, or specified by flaml.tune.randint, flaml.tune.qrandint, flaml.tune.lograndint or flaml.qlograndint. By default, max_tokens is searched in [50, 1000); n is searched in [1, 100); and best_of is fixed to 1.
+stop. It can be a str or a list of strs, or a list of lists of strs or None. Default is None.
+temperature or top_p. One of them can be specified as a constant or by flaml.tune.uniform or flaml.tune.loguniform etc. Please don't provide both. By default, each configuration will choose either a temperature or a top_p in [0, 1] uniformly.
+presence_penalty, frequency_penalty. They can be constants or specified by flaml.tune.uniform etc. Not tuned by default.
+Budgets​
+One can specify an inference budget and an optimization budget. The inference budget refers to the average inference cost per data instance. The optimization budget refers to the total budget allowed in the tuning process. Both are measured by dollars and follow the price per 1000 tokens.
+
+Perform tuning​
+Now, you can use autogen.Completion.tune for tuning. For example,
+
+import autogen
+
+config, analysis = autogen.Completion.tune(
+    data=tune_data,
+    metric="success",
+    mode="max",
+    eval_func=eval_func,
+    inference_budget=0.05,
+    optimization_budget=3,
+    num_samples=-1,
+)
+num_samples is the number of configurations to sample. -1 means unlimited (until optimization budget is exhausted). The returned config contains the optimized configuration and analysis contains an ExperimentAnalysis object for all the tried configurations and results.
+
+The tuned config can be used to perform inference.
+
+API unification​
+autogen.OpenAIWrapper.create() can be used to create completions for both chat and non-chat models, and both OpenAI API and Azure OpenAI API.
+
+from autogen import OpenAIWrapper
+# OpenAI endpoint
+client = OpenAIWrapper()
+# ChatCompletion
+response = client.create(messages=[{"role": "user", "content": "2+2="}], model="gpt-3.5-turbo")
+# extract the response text
+print(client.extract_text_or_completion_object(response))
+# get cost of this completion
+print(response.cost)
+# Azure OpenAI endpoint
+client = OpenAIWrapper(api_key=..., base_url=..., api_version=..., api_type="azure")
+# Completion
+response = client.create(prompt="2+2=", model="gpt-3.5-turbo-instruct")
+# extract the response text
+print(client.extract_text_or_completion_object(response))
+
+For local LLMs, one can spin up an endpoint using a package like FastChat, and then use the same API to send a request. See here for examples on how to make inference with local LLMs.
+
+Usage Summary​
+The OpenAIWrapper from autogen tracks token counts and costs of your API calls. Use the create() method to initiate requests and print_usage_summary() to retrieve a detailed usage report, including total cost and token usage for both cached and actual requests.
+
+mode=["actual", "total"] (default): print usage summary for all completions and non-caching completions.
+mode='actual': only print non-cached usage.
+mode='total': only print all usage (including cache).
+Reset your session's usage data with clear_usage_summary() when needed. View Notebook
+
+Example usage:
+
+from autogen import OpenAIWrapper
+
+client = OpenAIWrapper()
+client.create(messages=[{"role": "user", "content": "Python learning tips."}], model="gpt-3.5-turbo")
+client.print_usage_summary()  # Display usage
+client.clear_usage_summary()  # Reset usage data
+Sample output:
+
+Usage summary excluding cached usage:
+Total cost: 0.00015
+* Model 'gpt-3.5-turbo': cost: 0.00015, prompt_tokens: 25, completion_tokens: 58, total_tokens: 83
+
+Usage summary including cached usage:
+Total cost: 0.00027
+* Model 'gpt-3.5-turbo': cost: 0.00027, prompt_tokens: 50, completion_tokens: 100, total_tokens: 150
+Caching​
+API call results are cached locally and reused when the same request is issued. This is useful when repeating or continuing experiments for reproducibility and cost saving. It still allows controlled randomness by setting the "cache_seed" specified in OpenAIWrapper.create() or the constructor of OpenAIWrapper.
+
+client = OpenAIWrapper(cache_seed=...)
+client.create(...)
+client = OpenAIWrapper()
+client.create(cache_seed=..., ...)
+Caching is enabled by default with cache_seed 41. To disable it please set cache_seed to None.
+
+NOTE. openai v1.1 introduces a new param seed. The difference between autogen's cache_seed and openai's seed is that:
+
+autogen uses local disk cache to guarantee the exactly same output is produced for the same input and when cache is hit, no openai api call will be made.
+openai's seed is a best-effort deterministic sampling with no guarantee of determinism. When using openai's seed with cache_seed set to None, even for the same input, an openai api call will be made and there is no guarantee for getting exactly the same output.
+Error handling​
+Runtime error​
+One can pass a list of configurations of different models/endpoints to mitigate the rate limits and other runtime error. For example,
+
+client = OpenAIWrapper(
+    config_list=[
+        {
+            "model": "gpt-4",
+            "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
+            "api_type": "azure",
+            "base_url": os.environ.get("AZURE_OPENAI_API_BASE"),
+            "api_version": "2023-08-01-preview",
+        },
+        {
+            "model": "gpt-3.5-turbo",
+            "api_key": os.environ.get("OPENAI_API_KEY"),
+            "base_url": "https://api.openai.com/v1",
+        },
+        {
+            "model": "llama2-chat-7B",
+            "base_url": "http://127.0.0.1:8080",
+        }
+    ],
+)
+client.create() will try querying Azure OpenAI gpt-4, OpenAI gpt-3.5-turbo, and a locally hosted llama2-chat-7B one by one, until a valid result is returned. This can speed up the development process where the rate limit is a bottleneck. An error will be raised if the last choice fails. So make sure the last choice in the list has the best availability.
+
+For convenience, we provide a number of utility functions to load config lists.
+
+get_config_list: Generates configurations for API calls, primarily from provided API keys.
+config_list_openai_aoai: Constructs a list of configurations using both Azure OpenAI and OpenAI endpoints, sourcing API keys from environment variables or local files.
+config_list_from_json: Loads configurations from a JSON structure, either from an environment variable or a local JSON file, with the flexibility of filtering configurations based on given criteria.
+config_list_from_models: Creates configurations based on a provided list of models, useful when targeting specific models without manually specifying each configuration.
+config_list_from_dotenv: Constructs a configuration list from a .env file, offering a consolidated way to manage multiple API configurations and keys from a single file.
+We suggest that you take a look at this notebook for full code examples of the different methods to configure your model endpoints.
+
+Logic error​
+Another type of error is that the returned response does not satisfy a requirement. For example, if the response is required to be a valid json string, one would like to filter the responses that are not. This can be achieved by providing a list of configurations and a filter function. For example,
+
+def valid_json_filter(response, **_):
+    for text in OpenAIWrapper.extract_text_or_completion_object(response):
+        try:
+            json.loads(text)
+            return True
+        except ValueError:
+            pass
+    return False
+
+client = OpenAIWrapper(
+    config_list=[{"model": "text-ada-001"}, {"model": "gpt-3.5-turbo-instruct"}, {"model": "text-davinci-003"}],
+)
+response = client.create(
+    prompt="How to construct a json request to Bing API to search for 'latest AI news'? Return the JSON request.",
+    filter_func=valid_json_filter,
+)
+The example above will try to use text-ada-001, gpt-3.5-turbo-instruct, and text-davinci-003 iteratively, until a valid json string is returned or the last config is used. One can also repeat the same model in the list for multiple times (with different seeds) to try one model multiple times for increasing the robustness of the final response.
+
+Advanced use case: Check this blogpost to find how to improve GPT-4's coding performance from 68% to 90% while reducing the inference cost.
+
+Templating​
+If the provided prompt or message is a template, it will be automatically materialized with a given context. For example,
+
+response = client.create(
+    context={"problem": "How many positive integers, not exceeding 100, are multiples of 2 or 3 but not 4?"},
+    prompt="{problem} Solve the problem carefully.",
+    allow_format_str_template=True,
+    **config
+)
+A template is either a format str, like the example above, or a function which produces a str from several input fields, like the example below.
+
+def content(turn, context):
+    return "\n".join(
+        [
+            context[f"user_message_{turn}"],
+            context[f"external_info_{turn}"]
+        ]
+    )
+
+messages = [
+    {
+        "role": "system",
+        "content": "You are a teaching assistant of math.",
+    },
+    {
+        "role": "user",
+        "content": partial(content, turn=0),
+    },
+]
+context = {
+    "user_message_0": "Could you explain the solution to Problem 1?",
+    "external_info_0": "Problem 1: ...",
+}
+
+response = client.create(context=context, messages=messages, **config)
+messages.append(
+    {
+        "role": "assistant",
+        "content": client.extract_text(response)[0]
+    }
+)
+messages.append(
+    {
+        "role": "user",
+        "content": partial(content, turn=1),
+    },
+)
+context.append(
+    {
+        "user_message_1": "Why can't we apply Theorem 1 to Equation (2)?",
+        "external_info_1": "Theorem 1: ...",
+    }
+)
+response = client.create(context=context, messages=messages, **config)
+Logging (for openai<1)​
+When debugging or diagnosing an LLM-based system, it is often convenient to log the API calls and analyze them. autogen.Completion and autogen.ChatCompletion offer an easy way to collect the API call histories. For example, to log the chat histories, simply run:
+
+autogen.ChatCompletion.start_logging()
+The API calls made after this will be automatically logged. They can be retrieved at any time by:
+
+autogen.ChatCompletion.logged_history
+There is a function that can be used to print usage summary (total cost, and token count usage from each model):
+
+autogen.ChatCompletion.print_usage_summary()
+To stop logging, use
+
+autogen.ChatCompletion.stop_logging()
+If one would like to append the history to an existing dict, pass the dict like:
+
+autogen.ChatCompletion.start_logging(history_dict=existing_history_dict)
+By default, the counter of API calls will be reset at start_logging(). If no reset is desired, set reset_counter=False.
+
+There are two types of logging formats: compact logging and individual API call logging. The default format is compact. Set compact=False in start_logging() to switch.
+
+Example of a history dict with compact logging.
+{
+    """
+    [
+        {
+            'role': 'system',
+            'content': system_message,
+        },
+        {
+            'role': 'user',
+            'content': user_message_1,
+        },
+        {
+            'role': 'assistant',
+            'content': assistant_message_1,
+        },
+        {
+            'role': 'user',
+            'content': user_message_2,
+        },
+        {
+            'role': 'assistant',
+            'content': assistant_message_2,
+        },
+    ]""": {
+        "created_at": [0, 1],
+        "cost": [0.1, 0.2],
+    }
+}
+Example of a history dict with individual API call logging.
+{
+    0: {
+        "request": {
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_message,
+                },
+                {
+                    "role": "user",
+                    "content": user_message_1,
+                }
+            ],
+            ... # other parameters in the request
+        },
+        "response": {
+            "choices": [
+                "messages": {
+                    "role": "assistant",
+                    "content": assistant_message_1,
+                },
+            ],
+            ... # other fields in the response
+        }
+    },
+    1: {
+        "request": {
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_message,
+                },
+                {
+                    "role": "user",
+                    "content": user_message_1,
+                },
+                {
+                    "role": "assistant",
+                    "content": assistant_message_1,
+                },
+                {
+                    "role": "user",
+                    "content": user_message_2,
+                },
+            ],
+            ... # other parameters in the request
+        },
+        "response": {
+            "choices": [
+                "messages": {
+                    "role": "assistant",
+                    "content": assistant_message_2,
+                },
+            ],
+            ... # other fields in the response
+        }
+    },
+}
+Example of printing for usage summary
+Total cost: <cost>
+Token count summary for model <model>: prompt_tokens: <count 1>, completion_tokens: <count 2>, total_tokens: <count 3>
+It can be seen that the individual API call history contains redundant information of the conversation. For a long conversation the degree of redundancy is high. The compact history is more efficient and the individual API call history contains more details.
+
+
+
+Frequently Asked Questions
+Set your API endpoints​
+There are multiple ways to construct configurations for LLM inference in the oai utilities:
+
+get_config_list: Generates configurations for API calls, primarily from provided API keys.
+config_list_openai_aoai: Constructs a list of configurations using both Azure OpenAI and OpenAI endpoints, sourcing API keys from environment variables or local files.
+config_list_from_json: Loads configurations from a JSON structure, either from an environment variable or a local JSON file, with the flexibility of filtering configurations based on given criteria.
+config_list_from_models: Creates configurations based on a provided list of models, useful when targeting specific models without manually specifying each configuration.
+config_list_from_dotenv: Constructs a configuration list from a .env file, offering a consolidated way to manage multiple API configurations and keys from a single file.
+We suggest that you take a look at this notebook for full code examples of the different methods to configure your model endpoints.
+
+Use the constructed configuration list in agents​
+Make sure the "config_list" is included in the llm_config in the constructor of the LLM-based agent. For example,
+
+assistant = autogen.AssistantAgent(
+    name="assistant",
+    llm_config={"config_list": config_list}
+)
+The llm_config is used in the create function for LLM inference. When llm_config is not provided, the agent will rely on other openai settings such as openai.api_key or the environment variable OPENAI_API_KEY, which can also work when you'd like to use a single endpoint. You can also explicitly specify that by:
+
+assistant = autogen.AssistantAgent(name="assistant", llm_config={"api_key": ...})
+Unexpected keyword argument 'base_url'​
+In version >=1, OpenAI renamed their api_base parameter to base_url. So for older versions, use api_base but for newer versions use base_url.
+
+Can I use non-OpenAI models?​
+Yes. Please check https://microsoft.github.io/autogen/blog/2023/07/14/Local-LLMs for an example.
+
+Handle Rate Limit Error and Timeout Error​
+You can set max_retries to handle rate limit error. And you can set timeout to handle timeout error. They can all be specified in llm_config for an agent, which will be used in the OpenAI client for LLM inference. They can be set differently for different clients if they are set in the config_list.
+
+max_retries (int): the total number of times allowed for retrying failed requests for a single client.
+timeout (int): the timeout (in seconds) for a single client.
+Please refer to the documentation for more info.
+
+How to continue a finished conversation​
+When you call initiate_chat the conversation restarts by default. You can use send or initiate_chat(clear_history=False) to continue the conversation.
+
+How do we decide what LLM is used for each agent? How many agents can be used? How do we decide how many agents in the group?​
+Each agent can be customized. You can use LLMs, tools, or humans behind each agent. If you use an LLM for an agent, use the one best suited for its role. There is no limit of the number of agents, but start from a small number like 2, 3. The more capable is the LLM and the fewer roles you need, the fewer agents you need.
+
+The default user proxy agent doesn't use LLM. If you'd like to use an LLM in UserProxyAgent, the use case could be to simulate user's behavior.
+
+The default assistant agent is instructed to use both coding and language skills. It doesn't have to do coding, depending on the tasks. And you can customize the system message. So if you want to use it for coding, use a model that's good at coding.
+
+Why is code not saved as file?​
+If you are using a custom system message for the coding agent, please include something like: If you want the user to save the code in a file before executing it, put # filename: <filename> inside the code block as the first line. in the system message. This line is in the default system message of the AssistantAgent.
+
+If the # filename doesn't appear in the suggested code still, consider adding explicit instructions such as "save the code to disk" in the initial user message in initiate_chat. The AssistantAgent doesn't save all the code by default, because there are cases in which one would just like to finish a task without saving the code.
+
+Code execution​
+We strongly recommend using docker to execute code. There are two ways to use docker:
+
+Run AutoGen in a docker container. For example, when developing in GitHub codespace, AutoGen runs in a docker container. If you are not developing in Github codespace, follow instructions here to install and run AutoGen in docker.
+Run AutoGen outside of a docker, while performing code execution with a docker container. For this option, set up docker and make sure the python package docker is installed. When not installed and use_docker is omitted in code_execution_config, the code will be executed locally (this behavior is subject to change in future).
+Enable Python 3 docker image​
+You might want to override the default docker image used for code execution. To do that set use_docker key of code_execution_config property to the name of the image. E.g.:
+
+user_proxy = autogen.UserProxyAgent(
+    name="agent",
+    human_input_mode="TERMINATE",
+    max_consecutive_auto_reply=10,
+    code_execution_config={"work_dir":"_output", "use_docker":"python:3"},
+    llm_config=llm_config,
+    system_message=""""Reply TERMINATE if the task has been solved at full satisfaction.
+Otherwise, reply CONTINUE, or the reason why the task is not solved yet."""
+)
+If you have problems with agents running pip install or get errors similar to Error while fetching server API version: ('Connection aborted.', FileNotFoundError(2, 'No such file or directory'), you can choose 'python:3' as image as shown in the code example above and that should solve the problem.
+
+Agents keep thanking each other when using gpt-3.5-turbo​
+When using gpt-3.5-turbo you may often encounter agents going into a "gratitude loop", meaning when they complete a task they will begin congratulating and thanking each other in a continuous loop. This is a limitation in the performance of gpt-3.5-turbo, in contrast to gpt-4 which has no problem remembering instructions. This can hinder the experimentation experience when trying to test out your own use case with cheaper models.
+
+A workaround is to add an additional termination notice to the prompt. This acts a "little nudge" for the LLM to remember that they need to terminate the conversation when their task is complete. You can do this by appending a string such as the following to your user input string:
+
+prompt = "Some user query"
+
+termination_notice = (
+    '\n\nDo not show appreciation in your responses, say only what is necessary. '
+    'if "Thank you" or "You\'re welcome" are said in the conversation, then say TERMINATE '
+    'to indicate the conversation is finished and this is your last message.'
+)
+
+prompt += termination_notice
+Note: This workaround gets the job done around 90% of the time, but there are occurrences where the LLM still forgets to terminate the conversation.
+
+ChromaDB fails in codespaces because of old version of sqlite3​
+(from issue #251)
+
+Code examples that use chromadb (like retrieval) fail in codespaces due to a sqlite3 requirement.
+
+>>> import chromadb
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/home/vscode/.local/lib/python3.10/site-packages/chromadb/__init__.py", line 69, in <module>
+    raise RuntimeError(
+RuntimeError: Your system has an unsupported version of sqlite3. Chroma requires sqlite3 >= 3.35.0.
+Please visit https://docs.trychroma.com/troubleshooting#sqlite to learn how to upgrade.
+Workaround:
+
+pip install pysqlite3-binary
+mkdir /home/vscode/.local/lib/python3.10/site-packages/google/colab
+Explanation: Per this gist, linked from the official chromadb docs, adding this folder triggers chromadb to use pysqlite3 instead of the default.
+
+How to register a reply function​
+(from issue #478)
+
+See here https://microsoft.github.io/autogen/docs/reference/agentchat/conversable_agent/#register_reply
+
+For example, you can register a reply function that gets called when generate_reply is called for an agent.
+
+def print_messages(recipient, messages, sender, config):
+    if "callback" in config and  config["callback"] is not None:
+        callback = config["callback"]
+        callback(sender, recipient, messages[-1])
+    print(f"Messages sent to: {recipient.name} | num messages: {len(messages)}")
+    return False, None  # required to ensure the agent communication flow continues
+
+user_proxy.register_reply(
+    [autogen.Agent, None],
+    reply_func=print_messages,
+    config={"callback": None},
+)
+
+assistant.register_reply(
+    [autogen.Agent, None],
+    reply_func=print_messages,
+    config={"callback": None},
+)
+In the above, we register a print_messages function that is called each time the agent's generate_reply is triggered after receiving a message.
+
+How to get last message ?​
+Refer to https://microsoft.github.io/autogen/docs/reference/agentchat/conversable_agent/#last_message
+
+How to get each agent message ?​
+Please refer to https://microsoft.github.io/autogen/docs/reference/agentchat/conversable_agent#chat_messages
+
+When using autogen docker, is it always necessary to reinstall modules?​
+The "use_docker" arg in an agent's code_execution_config will be set to the name of the image containing the change after execution, when the conversation finishes. You can save that image name. For a new conversation, you can set "use_docker" to the saved name of the image to start execution there.
