@@ -64,7 +64,7 @@ python-dotenv==1.0.1
 python-iso639==2025.2.18
 python-magic==0.4.27
 PyYAML==6.0.2
-qdrant-client==1.13.2
+qdrant-client==1.11.0
 RapidFuzz==3.12.1
 regex==2024.11.6
 requests==2.32.3
@@ -86,5 +86,8 @@ urllib3==2.3.0
 wrapt==1.17.2
 yarl==1.18.3
 zstandard==0.23.0
-uvicorn
-fastapi
+
+# ✅ Corrected Versions
+uvicorn==0.27.1
+fastapi==0.110.0
+python-multipart==0.0.9
